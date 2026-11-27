@@ -62,19 +62,17 @@ test('feature and scenario overrides stay within their own scopes', () => {
   assert.notMatch(result.stderr, /sample\.feature:(5|9):/);
 });
 
-test('selects a shared dictionary independently for tables and docstrings', () => {
+test('uses shared dictionaries for text, tables and docstrings', () => {
   const dir = workspace();
   mkdirSync(join(dir, 'dictionary'));
   writeFileSync(join(dir, 'dictionary', 'places.dic'), 'wibbleton\n');
   writeFileSync(join(dir, 'cuke.yml'), 'checks: [spell]\ndictionary: dictionary\nspelling:\n  dataTables:\n    dictionaries: [places]\n  docStrings:\n    dictionaries: [places]\n');
   writeFileSync(join(dir, 'sample.feature'), 'Feature: Account\n  Scenario: Transfer\n    Given wibbleton\n      | wibbleton |\n    Then transfer\n      """\n      wibbleton\n      """\n');
   const result = run(dir, '--config', 'cuke.yml', 'sample.feature');
-  assert.notStrictEqual(result.status, 0);
-  assert.match(result.stderr, /sample\.feature:3:11:.*wibbleton/);
-  assert.notMatch(result.stderr, /sample\.feature:(4|7):/);
+  assert.strictEqual(result.status, 0, result.stderr);
 });
 
-test('merges inherited policies while replacing an overridden dictionary list', () => {
+test('inherits locale settings while using all shared dictionaries', () => {
   const dir = workspace();
   mkdirSync(join(dir, 'dictionary'));
   mkdirSync(join(dir, 'product'));
@@ -84,9 +82,7 @@ test('merges inherited policies while replacing an overridden dictionary list', 
   writeFileSync(join(dir, 'product', 'cuke.yml'), 'extends: ../shared.yml\nspelling:\n  text:\n    dictionaries: [terms]\n');
   writeFileSync(join(dir, 'sample.feature'), 'Feature: Colour\n  Scenario: Transfer\n    Given florple and wibbleton\n');
   const result = run(dir, '--config', 'product/cuke.yml', 'sample.feature');
-  assert.notStrictEqual(result.status, 0);
-  assert.match(result.stderr, /wibbleton/);
-  assert.notMatch(result.stderr, /florple|Colour/);
+  assert.strictEqual(result.status, 0, result.stderr);
 });
 
 test('rejects unsupported configured locales before checking files', () => {
@@ -103,4 +99,23 @@ test('checks docstring text after an escaped delimiter at its source location', 
   const result = run(dir, '--only', 'spell', 'sample.feature');
   assert.notStrictEqual(result.status, 0);
   assert.match(result.stderr, /sample\.feature:5:20:.*acount/);
+});
+
+test('automatically uses every domain dictionary in all regions without leaking language dictionaries', () => {
+  const dir = workspace();
+  mkdirSync(join(dir, 'dictionary'));
+  writeFileSync(join(dir, 'dictionary', 'places.dic'), 'wibbleton\n');
+  writeFileSync(join(dir, 'dictionary', 'terms.dic'), 'florple\n');
+  writeFileSync(join(dir, 'dictionary', 'en-GB.dic'), 'quabble\n');
+  writeFileSync(join(dir, 'dictionary', 'de.dic'), 'knurbel\n');
+  writeFileSync(join(dir, 'dictionary', 'fr.dic'), 'zorflin\n');
+  writeFileSync(join(dir, 'dictionary', 'german.dic'), 'plimzor\n');
+  writeFileSync(join(dir, 'sample.feature'), 'Feature: wibbleton\n  Scenario Outline: Transfer\n    Given florple and quabble and knurbel and zorflin and plimzor\n      | wibbleton |\n    Examples: Values\n      | item |\n      | florple |\n');
+  const result = run(dir, '--only', 'spell', '--dictionary', 'dictionary', 'sample.feature');
+  assert.notStrictEqual(result.status, 0);
+  assert.match(result.stderr, /quabble/);
+  assert.match(result.stderr, /knurbel/);
+  assert.match(result.stderr, /zorflin/);
+  assert.match(result.stderr, /plimzor/);
+  assert.notMatch(result.stderr, /wibbleton|florple/);
 });

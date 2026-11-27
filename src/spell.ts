@@ -1,5 +1,6 @@
 import { createRequire } from 'node:module';
-import { readFileSync, statSync, existsSync } from 'node:fs';
+import { readFileSync, statSync, existsSync, readdirSync } from 'node:fs';
+import { dialects } from '@cucumber/gherkin';
 import { dirname, join } from 'node:path';
 import { getDictionary, validateText } from 'cspell-lib';
 import type { Background, Examples, Feature, Rule, Scenario, Step, TableRow, Tag } from '@cucumber/messages';
@@ -57,6 +58,14 @@ function combine(base: Policy, region: Region, ...scopes: Scope[]): Policy {
   return result;
 }
 
+function isLanguageDictionary(name: string): boolean {
+  const lower = name.toLowerCase();
+  return ['english', 'german', 'british', 'american', 'british-english', 'american-english'].includes(lower)
+    || Object.keys(dialects).some(dialect => dialect.toLowerCase() === lower)
+    || Object.keys(locales).some(locale => locale.toLowerCase() === lower)
+    || /^[a-z]{2,3}[-_](?:[a-z]{2}|[0-9]{3})$/iu.test(name);
+}
+
 function readWords(path: string): string[] {
   return readFileSync(path, 'utf8').split(/\r?\n/u).map(line => line.trim())
     .filter(line => line && !line.startsWith('#') && !line.startsWith('!'));
@@ -70,6 +79,11 @@ export async function checkSpelling(feature: Feature | undefined, source: string
   const base: Policy = { locale: defaultLocale };
   const cache = new Map<string, { settings: Parameters<typeof getDictionary>[0]; dictionary: Awaited<ReturnType<typeof getDictionary>> }>();
   const directoryStat = dictionaryDir ? statSync(dictionaryDir) : undefined;
+  const sharedFiles = dictionaryDir && directoryStat?.isDirectory()
+    ? readdirSync(dictionaryDir, { withFileTypes: true })
+      .filter(item => (item.isFile() || item.isSymbolicLink()) && item.name.endsWith('.dic') && !isLanguageDictionary(item.name.slice(0, -4)))
+      .map(item => item.name).sort()
+    : [];
 
   async function text(value: string, line: number, column: number, policy: Policy, positions?: number[]) {
     if (!value) return;
@@ -88,9 +102,10 @@ export async function checkSpelling(feature: Feature | undefined, source: string
           if (existsSync(wordFile)) words.push(...readWords(wordFile));
         }
         for (const name of names) {
-          if (Object.hasOwn(locales, name) || Object.values(locales).some(item => item.short === name)) throw new Error(`locale dictionary cannot be used as a shared dictionary: ${name}`);
-          words.push(...readWords(join(dictionaryDir, `${name}.dic`)));
+          if (isLanguageDictionary(name)) throw new Error(`locale dictionary cannot be used as a shared dictionary: ${name}`);
+          if (!sharedFiles.includes(`${name}.dic`)) throw new Error(`shared dictionary not found: ${join(dictionaryDir, `${name}.dic`)}`);
         }
+        for (const sharedFile of sharedFiles) words.push(...readWords(join(dictionaryDir, sharedFile)));
       } else {
         if (names.length) throw new Error('shared dictionaries require a dictionary directory');
         if (dictionaryDir && locale === defaultLocale) words.push(...readWords(dictionaryDir));

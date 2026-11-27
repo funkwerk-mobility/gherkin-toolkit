@@ -42,7 +42,7 @@ Spelling supports US English (`en-US`), British English (`en-GB`) and German (`d
 
 A product dictionary directory contains UTF-8 word lists with one word per line; blank lines and lines starting with `#` are ignored. Locale-specific files are selected only for their locale: `en-US.dic` or `en.dic` for US English, `en-GB.dic` for British English, and `de-DE.dic` or `de.dic` for German. Both corresponding filenames are loaded if present. These files are optional. A direct `--dictionary` file is applied only to the feature's default locale. Forbidden words are planned separately.
 
-Shared lists such as `places.dic` are used only in policies that name them. For example:
+All non-language `.dic` files in the directory, such as `places.dic` and `terms.dic`, are used in every spelling region. Filenames matching Gherkin dialects, locale codes such as `en-GB`, and common language names such as `english` and `german` are treated as language dictionaries and are not shared. Use language-code names for locale dictionaries. For example:
 
 ```yaml
 checks: [syntax, spell]
@@ -51,22 +51,18 @@ spelling:
   dialects:
     en: en-US
     de: de-DE
-  text:
-    dictionaries: [places, terms]
   tables:
     locale: de-DE
-    dictionaries: [places]
   examples:
     locale: en-GB
   docStrings:
     locale: en-GB
-    dictionaries: [terms]
 ```
 
-`text` covers feature, rule, scenario and Examples prose and steps; `dataTables` covers step tables, `examples` covers Examples values, and `docStrings` covers untyped docstrings. The broad `tables` policy applies to both data tables and Examples values; `dataTables` or `examples` can override it. Examples headers use the feature dialect's mapped locale, with the text policy's shared dictionaries.
+`text` covers feature, rule, scenario and Examples prose and steps; `dataTables` covers step tables, `examples` covers Examples values, and `docStrings` covers untyped docstrings. The broad `tables` policy applies to both data tables and Examples values; `dataTables` or `examples` can override it. Examples headers use the feature dialect's mapped locale, with the shared dictionaries.
 
-Locale overrides can also be attached to a feature, rule or scenario with tags such as `@spell-tables=de`, `@spell-dataTables=en-US`, `@spell-examples=en-GB`, `@spell-docStrings=en-GB` or `@spell-text=en-US`. They affect their scope and descendants. For each scope, the specific region overrides `tables`; a child scope overrides its parent, even when the parent is more specific. Thus precedence is global, then feature, rule and scenario; within each scope it is broad tables followed by the specific region. A tag changes the locale, leaving the chosen shared dictionaries in place.
+Locale overrides can also be attached to a feature, rule or scenario with tags such as `@spell-tables=de`, `@spell-dataTables=en-US`, `@spell-examples=en-GB`, `@spell-docStrings=en-GB` or `@spell-text=en-US`. They affect their scope and descendants. For each scope, the specific region overrides `tables`; a child scope overrides its parent, even when the parent is more specific. Thus precedence is global, then feature, rule and scenario; within each scope it is broad tables followed by the specific region. A tag changes the locale; shared dictionaries still apply.
 
-Shared configuration inheritance merges spelling settings by region and property; dictionary lists replace inherited lists. A YAML `dictionary` path is relative to the file declaring it; `--dictionary` overrides it relative to the working directory. Only syntax checking is enabled without a configuration.
+Shared configuration inheritance merges spelling settings by region and property. Existing `dictionaries` lists are validated if specified, but do not restrict the automatically loaded shared dictionaries. A YAML `dictionary` path is relative to the file declaring it; `--dictionary` overrides it relative to the working directory. Only syntax checking is enabled without a configuration.
 
 The dictionaries have separate licenses; see [third-party dictionary notices](THIRD_PARTY_NOTICES.md) for licenses, source locations and distribution notes.
