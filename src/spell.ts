@@ -7,10 +7,41 @@ import { locales, spellingLocale, type Policy, type Region, type SpellConfig } f
 
 const require = createRequire(import.meta.url);
 
-type Scope = Partial<Record<Region, Policy>>;
-function tagPolicy(tags: readonly Tag[]): Scope {
+type Exclusion = 'tables' | 'examples' | 'docStrings';
+type Scope = Partial<Record<Region, Policy>> & { ignored?: Set<Exclusion> };
+function tagPolicy(tags: readonly Tag[], file: string): Scope {
   const result: Scope = {};
   for (const tag of tags) {
+    if (tag.name.startsWith('@spellchecker-ignore')) {
+      const match = /^@spellchecker-ignore=(.+)$/u.exec(tag.name);
+      const ignored = match?.[1].split(',') ?? [];
+      if (!ignored.length || ignored.some(item => !['tables', 'examples', 'docStrings'].includes(item))) {
+        console.error(`${file}:${tag.location.line}:${tag.location.column ?? 1}: invalid spelling exclusion: ${tag.name}`);
+        process.exitCode = 1;
+      } else {
+        result.ignored ??= new Set();
+        for (const item of ignored) result.ignored.add(item as Exclusion);
+      }
+      continue;
+    }
+    if (tag.name.startsWith('@spellchecker-language')) {
+      const match = /^@spellchecker-language=(.+)$/u.exec(tag.name);
+      try {
+        if (!match) throw new Error('missing language');
+        spellingLocale(match[1]);
+        result.examples = { locale: match[1] };
+        result.docStrings = { locale: match[1] };
+      } catch {
+        console.error(`${file}:${tag.location.line}:${tag.location.column ?? 1}: invalid spelling language: ${tag.name}`);
+        process.exitCode = 1;
+      }
+      continue;
+    }
+    if (tag.name.startsWith('@spellchecker-')) {
+      console.error(`${file}:${tag.location.line}:${tag.location.column ?? 1}: unknown spelling option: ${tag.name}`);
+      process.exitCode = 1;
+      continue;
+    }
     const match = /^@spell-(text|tables|dataTables|examples|docStrings)=(.+)$/u.exec(tag.name);
     if (match) result[match[1] as Region] = { locale: match[2] };
   }
@@ -35,7 +66,7 @@ export async function checkSpelling(feature: Feature | undefined, source: string
   if (!feature) return;
   const defaultLocale = spellingLocale(config.dialects?.[feature.language] ?? feature.language);
   const lines = source.split(/\r?\n/u);
-  const featureScope = tagPolicy(feature.tags);
+  const featureScope = tagPolicy(feature.tags, file);
   const base: Policy = { locale: defaultLocale };
   const cache = new Map<string, { settings: Parameters<typeof getDictionary>[0]; dictionary: Awaited<ReturnType<typeof getDictionary>> }>();
   const directoryStat = dictionaryDir ? statSync(dictionaryDir) : undefined;
@@ -114,17 +145,24 @@ export async function checkSpelling(feature: Feature | undefined, source: string
       await text(value, line, column, policy, positions);
     }
   }
+  function ignored(scopes: Scope[], region: Exclusion): boolean {
+    return scopes.some(scope => scope.ignored?.has(region));
+  }
   async function scenario(node: Scenario | Background, parent: Scope[]) {
-    const scopes = 'tags' in node ? [...parent, tagPolicy(node.tags)] : parent;
+    const scopes = 'tags' in node ? [...parent, tagPolicy(node.tags, file)] : parent;
     const textPolicy = combine(base, 'text', config, ...scopes);
     await header(node, textPolicy);
     for (const step of node.steps) {
       const line = step.location.line;
       const pos = lines[line - 1].indexOf(step.text, (step.location.column ?? 1) - 1 + step.keyword.length);
       await text(step.text, line, pos + 1, textPolicy);
-      if (step.dataTable) for (const item of step.dataTable.rows) await row(item, combine(base, 'dataTables', config, ...scopes));
-      if (step.docString && !step.docString.mediaType) {
+      if (step.dataTable && !ignored(scopes, 'tables')) for (const item of step.dataTable.rows) await row(item, combine(base, 'dataTables', config, ...scopes));
+      if (step.docString && !ignored(scopes, 'docStrings')) {
         const doc = step.docString;
+        const language = /^language[= ](.+)$/u.exec(doc.mediaType ?? '');
+        if (doc.mediaType && !language) continue;
+        const docPolicy = combine(base, 'docStrings', config, ...scopes);
+        if (language) docPolicy.locale = language[1];
         for (const [i, content] of doc.content.split('\n').entries()) {
           const sourceLine = doc.location.line + i + 1;
           const raw = lines[sourceLine - 1] ?? '';
@@ -137,18 +175,19 @@ export async function checkSpelling(feature: Feature | undefined, source: string
             positions.push(index - start);
             index++;
           }
-          if (content) await text(content, sourceLine, start + 1, combine(base, 'docStrings', config, ...scopes), positions);
+          if (content) await text(content, sourceLine, start + 1, docPolicy, positions);
         }
       }
     }
     if ('examples' in node) for (const example of node.examples) {
+      const exampleScopes = [...scopes, tagPolicy(example.tags, file)];
       await header(example, textPolicy);
       if (example.tableHeader) await row(example.tableHeader, { ...textPolicy, locale: defaultLocale });
-      for (const item of example.tableBody ?? []) await row(item, combine(base, 'examples', config, ...scopes));
+      if (!ignored(exampleScopes, 'examples')) for (const item of example.tableBody ?? []) await row(item, combine(base, 'examples', config, ...exampleScopes));
     }
   }
   async function rule(node: Rule, parent: Scope[]) {
-    const scopes = [...parent, tagPolicy(node.tags)];
+    const scopes = [...parent, tagPolicy(node.tags, file)];
     await header(node, combine(base, 'text', config, ...scopes));
     for (const child of node.children) {
       if (child.scenario) await scenario(child.scenario, scopes);

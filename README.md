@@ -28,6 +28,10 @@ Use `cuke check --config product/cuke.yml --only syntax features/` to override t
 
 ## Spelling
 
+Feature, rule, scenario and Examples tags support `@spellchecker-ignore=tables,examples,docStrings`. Exclusions accumulate in nested scopes: `tables` skips step data tables, `examples` skips Examples values (not headers), and `docStrings` skips docstring contents. Prose and steps continue to be checked. An Examples tag applies only to that Examples block. Invalid options produce an error.
+
+The tag `@spellchecker-language=de` changes the language for Examples values and docstrings in its scope; it does not change steps, step tables or Examples headers. An Examples tag affects that block only. A docstring can set its own language with an opening delimiter such as `"""language=de`. Supported values are `en`, `en-US`, `en-GB`, `de` and `de-DE`. Other typed docstrings are handled separately.
+
 Enable spelling with `checks: [syntax, spell]` in YAML, or run it on its own:
 
 ```sh
