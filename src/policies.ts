@@ -11,7 +11,7 @@ export function spellingLocale(value: string): string {
   return locale;
 }
 
-export type Policy = { locale?: string; locales?: string[]; dictionaries?: string[] };
+export type Policy = { locale?: string; locales?: string[]; dictionaries?: string[]; fixDestination?: string };
 export type Region = 'prose' | 'content' | 'quotes' | 'tables' | 'dataTables' | 'examples' | 'docStrings';
 export type SnippetMode = 'json' | 'text' | 'ignore';
 export type SpellConfig = { dialects?: Record<string, string>; specification?: Record<string, string>; docStringTypes?: Record<string, SnippetMode> } & Partial<Record<Region, Policy>>;
@@ -36,7 +36,8 @@ export function parseSpelling(value: unknown, source: string): SpellConfig {
     if (!['prose', 'content', 'quotes', 'tables', 'dataTables', 'examples', 'docStrings'].includes(key)) throw new Error(`${source}: unknown spelling setting: ${key}`);
     if (!setting || typeof setting !== 'object' || Array.isArray(setting)) throw new Error(`${source}: spelling.${key} must be a mapping`);
     const policy = setting as Record<string, unknown>;
-    if (Object.keys(policy).some(k => k !== 'locale' && k !== 'locales' && k !== 'dictionaries')) throw new Error(`${source}: unknown spelling.${key} setting`);
+    if (Object.keys(policy).some(k => k !== 'locale' && k !== 'locales' && k !== 'dictionaries' && k !== 'fixDestination')) throw new Error(`${source}: unknown spelling.${key} setting`);
+    if (policy.fixDestination !== undefined && (typeof policy.fixDestination !== 'string' || !/^[\p{L}\p{N}_-]+(?:\.dic)?$/u.test(policy.fixDestination))) throw new Error(`${source}: spelling.${key}.fixDestination must be a dictionary name`);
     if (policy.locale !== undefined && (typeof policy.locale !== 'string' || !policy.locale)) throw new Error(`${source}: spelling.${key}.locale must be a locale`);
     if (policy.locales !== undefined && (!Array.isArray(policy.locales) || !policy.locales.length || policy.locales.some(v => typeof v !== 'string' || !v))) throw new Error(`${source}: spelling.${key}.locales must be a nonempty list of locales`);
     if (policy.locale !== undefined && policy.locales !== undefined) throw new Error(`${source}: spelling.${key} cannot specify both locale and locales`);

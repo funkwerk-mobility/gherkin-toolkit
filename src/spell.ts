@@ -1,5 +1,5 @@
 import { createRequire } from 'node:module';
-import { readFileSync, statSync, existsSync, readdirSync } from 'node:fs';
+import { readFileSync, writeFileSync, statSync, existsSync, readdirSync } from 'node:fs';
 import { dialects } from '@cucumber/gherkin';
 import { dirname, join } from 'node:path';
 import { getDictionary, validateText } from 'cspell-lib';
@@ -89,10 +89,53 @@ function isLanguageDictionary(name: string): boolean {
 
 function readWords(path: string): string[] {
   return readFileSync(path, 'utf8').split(/\r?\n/u).map(line => line.trim())
-    .filter(line => line && !line.startsWith('#') && !line.startsWith('!'));
+    .filter(line => line && !line.startsWith('#'));
 }
 
-export async function checkSpelling(feature: Feature | undefined, source: string, file: string, dictionaryDir?: string, config: SpellConfig = {}): Promise<void> {
+type FixCandidate = { word: string; path?: string; location: string };
+export class SpellingFixes {
+  private candidates: FixCandidate[] = [];
+  add(candidate: FixCandidate): void { this.candidates.push(candidate); }
+  apply(): void {
+    const groups = new Map<string, FixCandidate[]>();
+    let missingDictionary = false;
+    for (const candidate of this.candidates) {
+      if (!candidate.path) {
+        if (!candidate.path) missingDictionary = true;
+        continue;
+      }
+      groups.set(candidate.path, [...(groups.get(candidate.path) ?? []), candidate]);
+    }
+    if (missingDictionary) console.error('Cannot fix spelling without a product dictionary.');
+    for (const [path, candidates] of groups) {
+      try {
+        const original = existsSync(path) ? readFileSync(path, 'utf8') : '';
+        const newline = original.includes('\r\n') ? '\r\n' : '\n';
+        const lines = original ? original.split(/\r?\n/u) : [];
+        const endsWithNewline = /\r?\n$/u.test(original);
+        if (endsWithNewline) lines.pop();
+        const existing = new Set(lines.map(line => line.trim().toLocaleLowerCase()));
+        const added: string[] = [];
+        for (const word of [...new Set(candidates.map(candidate => candidate.word))].sort((a, b) => a.localeCompare(b))) {
+          if (existing.has(word.toLocaleLowerCase()) || existing.has(`!${word.toLocaleLowerCase()}`)) continue;
+          const index = lines.findIndex(line => line.trim() && !/^[#!]/u.test(line.trim()) && line.trim().localeCompare(word, undefined, { sensitivity: 'base' }) > 0);
+          if (index >= 0) lines.splice(index, 0, word); else lines.push(word);
+          existing.add(word.toLocaleLowerCase());
+          added.push(word);
+        }
+        if (added.length) {
+          writeFileSync(path, lines.join(newline) + (endsWithNewline || !original ? newline : ''), 'utf8');
+          for (const word of added) console.log(`Added ${word} to ${path}`);
+        }
+      } catch (error) {
+        console.error(`${path}: ${error instanceof Error ? error.message : String(error)}`);
+        process.exitCode = 1;
+      }
+    }
+  }
+}
+
+export async function checkSpelling(feature: Feature | undefined, source: string, file: string, dictionaryDir?: string, config: SpellConfig = {}, fixes?: SpellingFixes): Promise<void> {
   if (!feature) return;
   const defaultLocale = spellingLocale(config.specification?.[feature.language] ?? config.dialects?.[feature.language] ?? feature.language);
   const lines = source.split(/\r?\n/u);
@@ -135,20 +178,29 @@ export async function checkSpelling(feature: Feature | undefined, source: string
         if (names.length) throw new Error('shared dictionaries require a dictionary directory');
         if (dictionaryDir && selectedLocales.includes(defaultLocale)) words.push(...readWords(dictionaryDir));
       }
-      const settings = { dictionaryDefinitions: definitions, dictionaries: selectedLocales, minWordLength: 2, words };
+      const settings = { dictionaryDefinitions: definitions, dictionaries: selectedLocales, minWordLength: 2, words: words.filter(word => !word.startsWith('!')), flagWords: words.filter(word => word.startsWith('!')).map(word => word.slice(1)) };
       entry = { settings, dictionary: await getDictionary(settings) };
       cache.set(key, entry);
     }
     const normalized = value.replace(/’/gu, "'");
     const invalid = [...normalized.matchAll(/[\p{L}\p{M}]+(?:'[\p{L}\p{M}]+)+/gu)].filter(match => !entry!.dictionary.has(match[0]));
-    function diagnostic(offset: number, word: string) {
-      console.error(`${file}:${line}:${column + (positions?.[offset] ?? offset)}: unknown word: ${word}`);
+    function diagnostic(offset: number, word: string, forbidden = false) {
+      const location = `${file}:${line}:${column + (positions?.[offset] ?? offset)}`;
+      if (fixes && forbidden) return;
+      if (fixes && !forbidden) {
+        const destination = policy.fixDestination ? `${policy.fixDestination.replace(/\.dic$/u, '')}.dic` : `${locales[defaultLocale].short ?? defaultLocale}.dic`;
+        const path = dictionaryDir && directoryStat?.isDirectory() ? join(dictionaryDir, destination) : dictionaryDir;
+        fixes.add({ location, word, path });
+        return;
+      }
+      console.error(`${location}: ${forbidden ? 'forbidden' : 'unknown'} word: ${word}`);
       process.exitCode = 1;
     }
-    for (const match of invalid) diagnostic(match.index, value.slice(match.index, match.index + match[0].length));
-    for (const issue of await validateText(normalized, entry.settings)) {
+    const issues = await validateText(normalized, entry.settings);
+    for (const match of invalid) diagnostic(match.index, value.slice(match.index, match.index + match[0].length), issues.some(issue => issue.isFlagged && issue.offset >= match.index && issue.offset < match.index + match[0].length));
+    for (const issue of issues) {
       if (invalid.some(match => issue.offset >= match.index && issue.offset < match.index + match[0].length)) continue;
-      diagnostic(issue.offset, value.slice(issue.offset, issue.offset + issue.text.length));
+      diagnostic(issue.offset, value.slice(issue.offset, issue.offset + issue.text.length), issue.isFlagged);
     }
   }
   async function textWithQuotes(value: string, line: number, column: number, policy: Policy, quotePolicy: Policy) {
