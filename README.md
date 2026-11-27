@@ -65,4 +65,4 @@ Locale overrides can also be attached to a feature, rule or scenario with tags s
 
 Shared configuration inheritance merges spelling settings by region and property; dictionary lists replace inherited lists. A YAML `dictionary` path is relative to the file declaring it; `--dictionary` overrides it relative to the working directory. Only syntax checking is enabled without a configuration.
 
-The CSpell US English dictionary declares the MIT license. Its British English and German dictionary packages declare LGPL-3.0; review their distribution requirements when publishing the toolkit.
+The dictionaries have separate licenses; see [third-party dictionary notices](THIRD_PARTY_NOTICES.md) for licenses, source locations and distribution notes.
