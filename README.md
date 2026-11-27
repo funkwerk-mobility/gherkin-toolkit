@@ -42,27 +42,33 @@ Spelling supports US English (`en-US`), British English (`en-GB`) and German (`d
 
 A product dictionary directory contains UTF-8 word lists with one word per line; blank lines and lines starting with `#` are ignored. Locale-specific files are selected only for their locale: `en-US.dic` or `en.dic` for US English, `en-GB.dic` for British English, and `de-DE.dic` or `de.dic` for German. Both corresponding filenames are loaded if present. These files are optional. A direct `--dictionary` file is applied only to the feature's default locale. Forbidden words are planned separately.
 
-All non-language `.dic` files in the directory, such as `places.dic` and `terms.dic`, are used in every spelling region. Filenames matching Gherkin dialects, locale codes such as `en-GB`, and common language names such as `english` and `german` are treated as language dictionaries and are not shared. Use language-code names for locale dictionaries. For example:
+All non-language `.dic` files in the directory, such as `places.dic` and `terms.dic`, are used in every spelling region. Filenames matching Gherkin keyword languages, locale codes such as `en-GB`, and common language names such as `english` and `german` are treated as language dictionaries and are not shared. Use language-code names for locale dictionaries.
 
 ```yaml
 checks: [syntax, spell]
 dictionary: ./spellchecker
 spelling:
-  dialects:
+  specification:
     en: en-US
     de: de-DE
+  content:
+    locales: [en-US, de-DE]
+  prose:
+    locales: [en-US, en-GB]
   tables:
-    locale: de-DE
-  examples:
-    locale: en-GB
-  docStrings:
-    locale: en-GB
+    locales: [en-US, de-DE]
+  quotes:
+    locales: [en-US, de-DE]
 ```
 
-`text` covers feature, rule, scenario and Examples prose and steps; `dataTables` covers step tables, `examples` covers Examples values, and `docStrings` covers untyped docstrings. The broad `tables` policy applies to both data tables and Examples values; `dataTables` or `examples` can override it. Examples headers use the feature dialect's mapped locale, with the shared dictionaries.
+`specification` maps each feature's Gherkin keyword language to one spelling locale for titles and unquoted step text. Defaults are `en: en-US` and `de: de-DE`; an unmapped, unsupported keyword language is an error. The previously supported `dialects` map and single-locale `text` policy remain available; `specification` takes precedence over `dialects`, `text`, and `@spell-text` for mapped languages. For compatibility, `text` and `@spell-text` can override specification text when no explicit `specification` mapping is supplied for that language.
 
-Locale overrides can also be attached to a feature, rule or scenario with tags such as `@spell-tables=de`, `@spell-dataTables=en-US`, `@spell-examples=en-GB`, `@spell-docStrings=en-GB` or `@spell-text=en-US`. They affect their scope and descendants. For each scope, the specific region overrides `tables`; a child scope overrides its parent, even when the parent is more specific. Thus precedence is global, then feature, rule and scenario; within each scope it is broad tables followed by the specific region. A tag changes the locale; shared dictionaries still apply.
+`prose` covers descriptive paragraphs and defaults to the specification locale independently of `content`. The `content` policy is the default for `quotes` in prose and steps, `docStrings`, step `dataTables`, and `examples` values. Without an override, content also defaults to the specification locale. `tables` overrides `content` for both data tables and Examples values; `dataTables` and `examples` override `tables`. Examples headers use the specification locale. A region accepts a word if any of its selected locales or a shared dictionary accepts it. A region can use `locale` for one language or `locales` for a nonempty list; a list replaces an inherited list.
 
-Shared configuration inheritance merges spelling settings by region and property. Existing `dictionaries` lists are validated if specified, but do not restrict the automatically loaded shared dictionaries. A YAML `dictionary` path is relative to the file declaring it; `--dictionary` overrides it relative to the working directory. Only syntax checking is enabled without a configuration.
+Double-quoted spans in steps and descriptive prose use the `quotes` policy; escaped quotation marks are kept within the span. A quote inside a table or docstring uses the table or docstring policy instead. Unmatched quotes remain part of the surrounding text. Titles use the specification policy throughout.
+
+Feature, rule and scenario tags can override a policy with a comma-separated list, for example `@spell-content=en-US,de-DE`, `@spell-quotes=de-DE`, or `@spell-prose=en-GB`. Supported region names are `prose`, `content`, `quotes`, `tables`, `dataTables`, `examples`, and `docStrings`. Within each scope a more specific region overrides a broader one; a child scope overrides its parent, even when the parent is more specific. Thus policies apply in global, feature, rule, scenario, then Examples scope order. Locale lists replace earlier selections, not append to them. Existing `@spell-text` tags accept one locale, and existing `@spellchecker-language` and exclusion tags continue to work. A docstring's `language=...` override takes precedence for that docstring.
+
+Shared configuration inheritance merges spelling settings by region and property. Existing `dictionaries` lists are validated if specified, but do not restrict the automatically loaded shared dictionaries. A YAML `dictionary` path is relative to the file declaring it; `--dictionary` overrides it relative to the working directory. Only syntax checking is enabled without a configuration. When dictionary fixes are implemented, a configured fix destination will take precedence; otherwise ambiguous multi-locale content will use the feature's specification-language dictionary.
 
 The dictionaries have separate licenses; see [third-party dictionary notices](THIRD_PARTY_NOTICES.md) for licenses, source locations and distribution notes.
