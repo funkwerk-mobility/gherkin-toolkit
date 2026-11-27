@@ -5,20 +5,24 @@ import { dirname, join } from 'node:path';
 import { getDictionary, validateText } from 'cspell-lib';
 import type { Background, Examples, Feature, Rule, Scenario, Step, TableRow, Tag } from '@cucumber/messages';
 import { locales, mergePolicy, spellingLocale, type Policy, type Region, type SpellConfig } from './policies.js';
+import type { Reporter } from './diagnostics.js';
 
 const require = createRequire(import.meta.url);
 
 type Exclusion = 'tables' | 'examples' | 'docStrings';
 type Scope = Partial<Record<Region, Policy>> & { ignored?: Set<Exclusion> };
-function tagPolicy(tags: readonly Tag[], file: string): Scope {
+function tagPolicy(tags: readonly Tag[], file: string, reporter: Reporter, reportErrors = true): Scope {
   const result: Scope = {};
+  function invalid(tag: Tag, message: string): void {
+    if (!reportErrors) return;
+    reporter.report({ path: file, line: tag.location.line, column: tag.location.column ?? 1, rule: 'spelling-option', severity: 'error', message: `${message}: ${tag.name}` });
+  }
   for (const tag of tags) {
     if (tag.name.startsWith('@spellchecker-ignore')) {
       const match = /^@spellchecker-ignore=(.+)$/u.exec(tag.name);
       const ignored = match?.[1].split(',') ?? [];
       if (!ignored.length || ignored.some(item => !['tables', 'examples', 'docStrings'].includes(item))) {
-        console.error(`${file}:${tag.location.line}:${tag.location.column ?? 1}: invalid spelling exclusion: ${tag.name}`);
-        process.exitCode = 1;
+        invalid(tag, 'invalid spelling exclusion');
       } else {
         result.ignored ??= new Set();
         for (const item of ignored) result.ignored.add(item as Exclusion);
@@ -33,19 +37,16 @@ function tagPolicy(tags: readonly Tag[], file: string): Scope {
         result.examples = { locale: match[1] };
         result.docStrings = { locale: match[1] };
       } catch {
-        console.error(`${file}:${tag.location.line}:${tag.location.column ?? 1}: invalid spelling language: ${tag.name}`);
-        process.exitCode = 1;
+        invalid(tag, 'invalid spelling language');
       }
       continue;
     }
     if (tag.name.startsWith('@spellchecker-')) {
-      console.error(`${file}:${tag.location.line}:${tag.location.column ?? 1}: unknown spelling option: ${tag.name}`);
-      process.exitCode = 1;
+      invalid(tag, 'unknown spelling option');
       continue;
     }
     if (tag.name === '@spell-text' || tag.name.startsWith('@spell-text=')) {
-      console.error(`${file}:${tag.location.line}:${tag.location.column ?? 1}: unsupported spelling option: ${tag.name}`);
-      process.exitCode = 1;
+      invalid(tag, 'unsupported spelling option');
       continue;
     }
     const match = /^@spell-(prose|content|quotes|tables|dataTables|examples|docStrings)=(.*)$/u.exec(tag.name);
@@ -57,8 +58,7 @@ function tagPolicy(tags: readonly Tag[], file: string): Scope {
         values.forEach(spellingLocale);
         result[region] = { locales: values };
       } catch {
-        console.error(`${file}:${tag.location.line}:${tag.location.column ?? 1}: invalid spelling locales: ${tag.name}`);
-        process.exitCode = 1;
+        invalid(tag, 'invalid spelling locales');
       }
     }
   }
@@ -95,6 +95,7 @@ function readWords(path: string): string[] {
 type FixCandidate = { word: string; path?: string; location: string };
 export class SpellingFixes {
   private candidates: FixCandidate[] = [];
+  constructor(private reporter: Reporter) {}
   add(candidate: FixCandidate): void { this.candidates.push(candidate); }
   apply(): void {
     const groups = new Map<string, FixCandidate[]>();
@@ -106,7 +107,7 @@ export class SpellingFixes {
       }
       groups.set(candidate.path, [...(groups.get(candidate.path) ?? []), candidate]);
     }
-    if (missingDictionary) console.error('Cannot fix spelling without a product dictionary.');
+    if (missingDictionary) this.reporter.report({ rule: 'missing-dictionary', severity: 'error', message: 'Cannot fix spelling without a product dictionary.' });
     for (const [path, candidates] of groups) {
       try {
         const original = existsSync(path) ? readFileSync(path, 'utf8') : '';
@@ -125,21 +126,20 @@ export class SpellingFixes {
         }
         if (added.length) {
           writeFileSync(path, lines.join(newline) + (endsWithNewline || !original ? newline : ''), 'utf8');
-          for (const word of added) console.log(`Added ${word} to ${path}`);
+          for (const word of added) this.reporter.fixed(`Added ${word} to ${path}`);
         }
       } catch (error) {
-        console.error(`${path}: ${error instanceof Error ? error.message : String(error)}`);
-        process.exitCode = 1;
+        this.reporter.report({ path, rule: 'dictionary-write', severity: 'error', message: error instanceof Error ? error.message : String(error) });
       }
     }
   }
 }
 
-export async function checkSpelling(feature: Feature | undefined, source: string, file: string, dictionaryDir?: string, config: SpellConfig = {}, fixes?: SpellingFixes): Promise<void> {
+export async function checkSpelling(feature: Feature | undefined, source: string, file: string, dictionaryDir: string | undefined, config: SpellConfig = {}, reporter: Reporter, fixes?: SpellingFixes): Promise<void> {
   if (!feature) return;
   const defaultLocale = spellingLocale(config.specification?.[feature.language] ?? config.dialects?.[feature.language] ?? feature.language);
   const lines = source.split(/\r?\n/u);
-  const featureScope = tagPolicy(feature.tags, file);
+  const featureScope = tagPolicy(feature.tags, file, reporter, !fixes);
   const base: Policy = { locale: defaultLocale };
   const cache = new Map<string, { settings: Parameters<typeof getDictionary>[0]; dictionary: Awaited<ReturnType<typeof getDictionary>> }>();
   const directoryStat = dictionaryDir ? statSync(dictionaryDir) : undefined;
@@ -193,8 +193,7 @@ export async function checkSpelling(feature: Feature | undefined, source: string
         fixes.add({ location, word, path });
         return;
       }
-      console.error(`${location}: ${forbidden ? 'forbidden' : 'unknown'} word: ${word}`);
-      process.exitCode = 1;
+      reporter.report({ path: file, line, column: column + (positions?.[offset] ?? offset), rule: forbidden ? 'forbidden-word' : 'unknown-word', severity: 'error', message: `${forbidden ? 'forbidden' : 'unknown'} word: ${word}` });
     }
     const issues = await validateText(normalized, entry.settings);
     for (const match of invalid) diagnostic(match.index, value.slice(match.index, match.index + match[0].length), issues.some(issue => issue.isFlagged && issue.offset >= match.index && issue.offset < match.index + match[0].length));
@@ -269,7 +268,7 @@ export async function checkSpelling(feature: Feature | undefined, source: string
     return scopes.some(scope => scope.ignored?.has(region));
   }
   async function scenario(node: Scenario | Background, parent: Scope[]) {
-    const scopes = 'tags' in node ? [...parent, tagPolicy(node.tags, file)] : parent;
+    const scopes = 'tags' in node ? [...parent, tagPolicy(node.tags, file, reporter, !fixes)] : parent;
     const textPolicy = base;
     await header(node, textPolicy, combine(base, 'prose', config, ...scopes), combine(base, 'quotes', config, ...scopes));
     for (const step of node.steps) {
@@ -320,14 +319,14 @@ export async function checkSpelling(feature: Feature | undefined, source: string
       }
     }
     if ('examples' in node) for (const example of node.examples) {
-      const exampleScopes = [...scopes, tagPolicy(example.tags, file)];
+      const exampleScopes = [...scopes, tagPolicy(example.tags, file, reporter, !fixes)];
       await header(example, textPolicy, combine(base, 'prose', config, ...exampleScopes), combine(base, 'quotes', config, ...exampleScopes));
       if (example.tableHeader) await row(example.tableHeader, base);
       if (!ignored(exampleScopes, 'examples')) for (const item of example.tableBody ?? []) await row(item, combine(base, 'examples', config, ...exampleScopes));
     }
   }
   async function rule(node: Rule, parent: Scope[]) {
-    const scopes = [...parent, tagPolicy(node.tags, file)];
+    const scopes = [...parent, tagPolicy(node.tags, file, reporter, !fixes)];
     await header(node, base, combine(base, 'prose', config, ...scopes), combine(base, 'quotes', config, ...scopes));
     for (const child of node.children) {
       if (child.scenario) await scenario(child.scenario, scopes);

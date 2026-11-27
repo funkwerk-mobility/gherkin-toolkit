@@ -4,7 +4,7 @@ import { parse } from 'yaml';
 import { mergeSpelling, parseSpelling, type SpellConfig } from './policies.js';
 
 export type Check = 'spell';
-export type Configuration = { checks: Check[]; dictionary?: string; spelling?: SpellConfig };
+export type Configuration = { checks: Check[]; dictionary?: string; spelling?: SpellConfig; diagnosticLimit?: number };
 
 function checks(value: unknown, source: string): Check[] {
   if (!Array.isArray(value) || value.some(item => typeof item !== 'string')) {
@@ -37,7 +37,7 @@ export function resolveConfiguration(path: string | undefined, only: string[] | 
       if (typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error(`${file}: configuration must be a mapping`);
       const config = parsed as Record<string, unknown>;
       for (const key of Object.keys(config)) {
-        if (key !== 'checks' && key !== 'extends' && key !== 'dictionary' && key !== 'spelling') throw new Error(`${file}: unknown setting: ${key}`);
+        if (key !== 'checks' && key !== 'extends' && key !== 'dictionary' && key !== 'spelling' && key !== 'diagnostics') throw new Error(`${file}: unknown setting: ${key}`);
       }
       if (config.extends !== undefined && (typeof config.extends !== 'string' || !config.extends)) {
         throw new Error(`${file}: extends must be a path`);
@@ -45,11 +45,18 @@ export function resolveConfiguration(path: string | undefined, only: string[] | 
       if (config.dictionary !== undefined && (typeof config.dictionary !== 'string' || !config.dictionary)) {
         throw new Error(`${file}: dictionary must be a path`);
       }
+      if (config.diagnostics !== undefined) {
+        const diagnostics = config.diagnostics;
+        if (!diagnostics || typeof diagnostics !== 'object' || Array.isArray(diagnostics) || Object.keys(diagnostics).some(key => key !== 'limit')) throw new Error(`${file}: diagnostics must be a mapping with a limit`);
+        const limit = (diagnostics as Record<string, unknown>).limit;
+        if (limit !== undefined && (typeof limit !== 'number' || !Number.isSafeInteger(limit) || limit < 0)) throw new Error(`${file}: diagnostics.limit must be a nonnegative integer`);
+      }
       const inherited: Configuration = config.extends === undefined ? { checks: ['spell'] } : load(resolve(dirname(file), config.extends as string));
       return {
         checks: config.checks === undefined ? inherited.checks : checks(config.checks, file),
         dictionary: config.dictionary === undefined ? inherited.dictionary : resolve(dirname(file), config.dictionary as string),
         spelling: mergeSpelling(inherited.spelling, config.spelling === undefined ? undefined : parseSpelling(config.spelling, file)),
+        diagnosticLimit: (config.diagnostics as { limit?: number } | undefined)?.limit ?? inherited.diagnosticLimit,
       };
     } finally { active.delete(canonical); }
   }

@@ -12,6 +12,22 @@ Directories are searched recursively for `.feature` files. Pass individual paths
 
 For development, run `npm run typecheck` and `npm test` (Vitest).
 
+## Diagnostics
+
+Human-readable diagnostics go to standard error as `path:line:column: message [severity, rule]`. Errors make the command fail; warnings do not. Parsing errors do not prevent checking other files. By default at most 100 diagnostics are displayed, followed by a count of hidden diagnostics; every finding affects the exit status, including hidden ones. Set the limit in YAML or override it for one invocation:
+
+```yaml
+diagnostics:
+  limit: 50
+```
+
+```sh
+cuke check --limit 25 features/
+cuke check --format json features/
+```
+
+The limit is a nonnegative integer; zero hides all diagnostic details. `--format json` writes one JSON object to standard output with `diagnostics`, `total`, `hidden`, and `fixes`. Each diagnostic contains `rule`, `severity`, and `message`; file-specific findings also include `path` and, where available, `line` and `column`. `fixes` contains human-readable descriptions of applied changes. In JSON mode verbose progress goes to standard error, keeping standard output machine-readable. JSON output is emitted even when there are no findings.
+
 ## Configuration
 
 Pass a YAML file explicitly with `--config`:
