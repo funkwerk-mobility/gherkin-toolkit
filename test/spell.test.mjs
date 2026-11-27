@@ -54,10 +54,10 @@ test('configuration dictionary paths follow their declaring file and CLI overrid
 
 test('a feature in an unsupported language does not silently use English', () => {
   const dir = workspace();
-  writeFileSync(join(dir, 'de.feature'), '# language: de\nFunktionalität: Konto\n');
-  const result = run(dir, '--only', 'spell', 'de.feature');
+  writeFileSync(join(dir, 'fr.feature'), '# language: fr\nFonctionnalité: Compte\n');
+  const result = run(dir, '--only', 'spell', 'fr.feature');
   assert.notStrictEqual(result.status, 0);
-  assert.match(result.stderr, /de\.feature.*unsupported.*de/i);
+  assert.match(result.stderr, /fr\.feature.*unsupported.*fr/i);
 });
 
 test('rejects malformed contractions instead of accepting their fragments', () => {

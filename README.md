@@ -34,13 +34,35 @@ Enable spelling with `checks: [syntax, spell]` in YAML, or run it on its own:
 cuke check --only spell --dictionary spellchecker/ features/
 ```
 
-For now, spelling checks English Gherkin prose and steps using the bundled US English CSpell dictionary. Other Gherkin languages are reported as unsupported until language policies are implemented. Tables, Examples values and docstrings are also outside this initial spelling slice. Syntax is checked before spelling even when only spelling is selected.
+Spelling supports US English (`en-US`), British English (`en-GB`) and German (`de-DE`). By default the Gherkin dialects `en` and `de` map to `en-US` and `de-DE`. Prose, steps, data tables, Examples headers and values, and untyped docstrings are checked. Typed docstrings are deferred. Syntax is checked before spelling even when only spelling is selected.
 
-The optional product dictionary directory contains `en-US.dic`, a UTF-8 list with one word per line; blank lines and lines starting with `#` are ignored. The `--dictionary` option can also point directly to a word-list file. Other language files in the directory are not mixed into the English word list. A YAML `dictionary` path is relative to the file declaring it and is overridden by `--dictionary`, which is relative to the working directory. For example:
+A product dictionary directory contains UTF-8 word lists with one word per line; blank lines and lines starting with `#` are ignored. Locale-specific files are selected only for their locale: `en-US.dic` or `en.dic` for US English, `en-GB.dic` for British English, and `de-DE.dic` or `de.dic` for German. Both corresponding filenames are loaded if present. These files are optional. A direct `--dictionary` file is applied only to the feature's default locale. Forbidden words are planned separately.
+
+Shared lists such as `places.dic` are used only in policies that name them. For example:
 
 ```yaml
 checks: [syntax, spell]
 dictionary: ./spellchecker
+spelling:
+  dialects:
+    en: en-US
+    de: de-DE
+  text:
+    dictionaries: [places, terms]
+  tables:
+    locale: de-DE
+    dictionaries: [places]
+  examples:
+    locale: en-GB
+  docStrings:
+    locale: en-GB
+    dictionaries: [terms]
 ```
 
-Only syntax checking is enabled by default. Forbidden-word policies and language-specific selection are planned separately.
+`text` covers feature, rule, scenario and Examples prose and steps; `dataTables` covers step tables, `examples` covers Examples values, and `docStrings` covers untyped docstrings. The broad `tables` policy applies to both data tables and Examples values; `dataTables` or `examples` can override it. Examples headers use the feature dialect's mapped locale, with the text policy's shared dictionaries.
+
+Locale overrides can also be attached to a feature, rule or scenario with tags such as `@spell-tables=de`, `@spell-dataTables=en-US`, `@spell-examples=en-GB`, `@spell-docStrings=en-GB` or `@spell-text=en-US`. They affect their scope and descendants. For each scope, the specific region overrides `tables`; a child scope overrides its parent, even when the parent is more specific. Thus precedence is global, then feature, rule and scenario; within each scope it is broad tables followed by the specific region. A tag changes the locale, leaving the chosen shared dictionaries in place.
+
+Shared configuration inheritance merges spelling settings by region and property; dictionary lists replace inherited lists. A YAML `dictionary` path is relative to the file declaring it; `--dictionary` overrides it relative to the working directory. Only syntax checking is enabled without a configuration.
+
+The CSpell US English dictionary declares the MIT license. Its British English and German dictionary packages declare LGPL-3.0; review their distribution requirements when publishing the toolkit.

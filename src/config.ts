@@ -1,9 +1,10 @@
 import { readFileSync, realpathSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { parse } from 'yaml';
+import { mergeSpelling, parseSpelling, type SpellConfig } from './policies.js';
 
 export type Check = 'syntax' | 'spell';
-export type Configuration = { checks: Check[]; dictionary?: string };
+export type Configuration = { checks: Check[]; dictionary?: string; spelling?: SpellConfig };
 
 function checks(value: unknown, source: string): Check[] {
   if (!Array.isArray(value) || value.some(item => typeof item !== 'string')) {
@@ -36,7 +37,7 @@ export function resolveConfiguration(path: string | undefined, only: string[] | 
       if (typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error(`${file}: configuration must be a mapping`);
       const config = parsed as Record<string, unknown>;
       for (const key of Object.keys(config)) {
-        if (key !== 'checks' && key !== 'extends' && key !== 'dictionary') throw new Error(`${file}: unknown setting: ${key}`);
+        if (key !== 'checks' && key !== 'extends' && key !== 'dictionary' && key !== 'spelling') throw new Error(`${file}: unknown setting: ${key}`);
       }
       if (config.extends !== undefined && (typeof config.extends !== 'string' || !config.extends)) {
         throw new Error(`${file}: extends must be a path`);
@@ -48,6 +49,7 @@ export function resolveConfiguration(path: string | undefined, only: string[] | 
       return {
         checks: config.checks === undefined ? inherited.checks : checks(config.checks, file),
         dictionary: config.dictionary === undefined ? inherited.dictionary : resolve(dirname(file), config.dictionary as string),
+        spelling: mergeSpelling(inherited.spelling, config.spelling === undefined ? undefined : parseSpelling(config.spelling, file)),
       };
     } finally { active.delete(canonical); }
   }

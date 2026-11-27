@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { AstBuilder, Errors, GherkinClassicTokenMatcher, Parser } from '@cucumber/gherkin';
 import { IdGenerator } from '@cucumber/messages';
 import { resolveConfiguration, type Check } from './config.js';
+import type { SpellConfig } from './policies.js';
 
 function report(path: string, error: unknown): void {
   process.exitCode = 1;
@@ -20,9 +21,9 @@ function report(path: string, error: unknown): void {
   }
 }
 
-async function check(inputs: string[], checks: Check[], dictionary: string | undefined, verbose: boolean): Promise<void> {
+async function check(inputs: string[], checks: Check[], dictionary: string | undefined, verbose: boolean, policies?: SpellConfig): Promise<void> {
   let spelling: typeof import('./spell.js') | undefined;
-  let words: string[] | undefined;
+
   const seen = new Set<string>();
   async function visit(path: string): Promise<void> {
     try {
@@ -41,8 +42,7 @@ async function check(inputs: string[], checks: Check[], dictionary: string | und
         if (checks.includes('spell')) {
           if (verbose) console.log(`Checking spelling: ${path}`);
           spelling ??= await import('./spell.js');
-          words ??= spelling.productWords(dictionary);
-          await spelling.checkSpelling(document.feature, source, path, words);
+          await spelling.checkSpelling(document.feature, source, path, dictionary, policies);
         }
       }
     } catch (error) { report(path, error); }
@@ -71,7 +71,7 @@ if (process.argv[2] === 'check') {
       else inputs.push(arg);
     }
     const selected = resolveConfiguration(config, only);
-    if (selected.checks.length) await check(inputs, selected.checks, dictionary ?? selected.dictionary, verbose);
+    if (selected.checks.length) await check(inputs, selected.checks, dictionary ?? selected.dictionary, verbose, selected.spelling);
   } catch (error) {
     console.error(error instanceof Error ? error.message : String(error));
     process.exitCode = 1;
