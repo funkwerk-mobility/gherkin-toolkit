@@ -43,12 +43,17 @@ function tagPolicy(tags: readonly Tag[], file: string): Scope {
       process.exitCode = 1;
       continue;
     }
-    const match = /^@spell-(text|prose|content|quotes|tables|dataTables|examples|docStrings)=(.*)$/u.exec(tag.name);
+    if (tag.name === '@spell-text' || tag.name.startsWith('@spell-text=')) {
+      console.error(`${file}:${tag.location.line}:${tag.location.column ?? 1}: unsupported spelling option: ${tag.name}`);
+      process.exitCode = 1;
+      continue;
+    }
+    const match = /^@spell-(prose|content|quotes|tables|dataTables|examples|docStrings)=(.*)$/u.exec(tag.name);
     if (match) {
       const region = match[1] as Region;
       const values = match[2].split(',');
       try {
-        if (values.some(value => !value) || (region === 'text' && values.length !== 1)) throw new Error('invalid locale list');
+        if (values.some(value => !value)) throw new Error('invalid locale list');
         values.forEach(spellingLocale);
         result[region] = { locales: values };
       } catch {
@@ -158,7 +163,7 @@ export async function checkSpelling(feature: Feature | undefined, source: string
   async function header(node: Feature | Rule | Scenario | Background | Examples, policy: Policy, prosePolicy: Policy, quotePolicy: Policy) {
     const line = node.location.line;
     const nameColumn = lines[line - 1].indexOf(node.name, (node.location.column ?? 1) - 1 + node.keyword.length + 1);
-    if (node.name) await text(node.name, line, nameColumn + 1, policy);
+    if (node.name) await textWithQuotes(node.name, line, nameColumn + 1, policy, quotePolicy);
     let current = line;
     const parts: { value: string; line: number; column: number }[] = [];
     for (const description of node.description.split('\n')) {
@@ -208,18 +213,12 @@ export async function checkSpelling(feature: Feature | undefined, source: string
       await text(value, line, column, policy, positions);
     }
   }
-  function specificationPolicy(scopes: Scope[]): Policy {
-    const policy = combine(base, 'text', config, ...scopes);
-    return config.specification?.[feature!.language]
-      ? mergePolicy(policy, { locale: defaultLocale })
-      : policy;
-  }
   function ignored(scopes: Scope[], region: Exclusion): boolean {
     return scopes.some(scope => scope.ignored?.has(region));
   }
   async function scenario(node: Scenario | Background, parent: Scope[]) {
     const scopes = 'tags' in node ? [...parent, tagPolicy(node.tags, file)] : parent;
-    const textPolicy = specificationPolicy(scopes);
+    const textPolicy = base;
     await header(node, textPolicy, combine(base, 'prose', config, ...scopes), combine(base, 'quotes', config, ...scopes));
     for (const step of node.steps) {
       const line = step.location.line;
@@ -251,19 +250,19 @@ export async function checkSpelling(feature: Feature | undefined, source: string
     if ('examples' in node) for (const example of node.examples) {
       const exampleScopes = [...scopes, tagPolicy(example.tags, file)];
       await header(example, textPolicy, combine(base, 'prose', config, ...exampleScopes), combine(base, 'quotes', config, ...exampleScopes));
-      if (example.tableHeader) await row(example.tableHeader, { ...textPolicy, locale: defaultLocale, locales: undefined });
+      if (example.tableHeader) await row(example.tableHeader, base);
       if (!ignored(exampleScopes, 'examples')) for (const item of example.tableBody ?? []) await row(item, combine(base, 'examples', config, ...exampleScopes));
     }
   }
   async function rule(node: Rule, parent: Scope[]) {
     const scopes = [...parent, tagPolicy(node.tags, file)];
-    await header(node, specificationPolicy(scopes), combine(base, 'prose', config, ...scopes), combine(base, 'quotes', config, ...scopes));
+    await header(node, base, combine(base, 'prose', config, ...scopes), combine(base, 'quotes', config, ...scopes));
     for (const child of node.children) {
       if (child.scenario) await scenario(child.scenario, scopes);
       if (child.background) await scenario(child.background, scopes);
     }
   }
-  await header(feature, specificationPolicy([featureScope]), combine(base, 'prose', config, featureScope), combine(base, 'quotes', config, featureScope));
+  await header(feature, base, combine(base, 'prose', config, featureScope), combine(base, 'quotes', config, featureScope));
   for (const child of feature.children) {
     if (child.rule) await rule(child.rule, [featureScope]);
     if (child.scenario) await scenario(child.scenario, [featureScope]);

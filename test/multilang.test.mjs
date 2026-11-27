@@ -66,14 +66,6 @@ test('rejects a specification mapping with multiple locales', () => {
   assert.match(result.stderr, /specification.*single locales/);
 });
 
-test('Examples headers use the feature locale despite scope text overrides', () => {
-  const dir = workspace();
-  writeFileSync(join(dir, 'sample.feature'), '@spell-text=en-GB\nFeature: Colour\n  Scenario Outline: Colour\n    Given colour\n    Examples: Values\n      | colour |\n      | value |\n');
-  const result = run(dir, '--only', 'spell', 'sample.feature');
-  assert.notStrictEqual(result.status, 0);
-  assert.match(result.stderr, /sample\.feature:6:9:.*colour/);
-});
-
 test('specific policies override content and quotes inside tables keep the table policy', () => {
   const dir = workspace();
   writeFileSync(join(dir, 'cuke.yml'), 'checks: [spell]\nspelling:\n  content:\n    locales: [en-US, de-DE]\n  quotes:\n    locales: [en-US]\n  tables:\n    locales: [de-DE]\n  dataTables:\n    locales: [en-US]\n');
@@ -108,14 +100,16 @@ test('invalid region locale lists and scoped tag locales are rejected', () => {
   assert.match(tag.stderr, /sample\.feature:1:1:.*invalid spelling locales/);
 });
 
-test('an explicit specification mapping takes precedence over legacy text overrides', () => {
+test('obsolete text overrides are rejected', () => {
   const dir = workspace();
-  writeFileSync(join(dir, 'cuke.yml'), 'checks: [spell]\nspelling:\n  specification:\n    en: en-US\n  text:\n    locale: en-GB\n');
-  writeFileSync(join(dir, 'sample.feature'), '@spell-text=en-GB\nFeature: Colour\n  Scenario: Transfer\n    Given a colour\n');
-  const result = run(dir, '--config', 'cuke.yml', 'sample.feature');
-  assert.notStrictEqual(result.status, 0);
-  assert.match(result.stderr, /sample\.feature:2:10:.*Colour/);
-  assert.match(result.stderr, /sample\.feature:4:13:.*colour/);
+  writeFileSync(join(dir, 'cuke.yml'), 'spelling:\n  text:\n    locale: en-GB\n');
+  const config = run(dir, '--config', 'cuke.yml');
+  assert.notStrictEqual(config.status, 0);
+  assert.match(config.stderr, /unknown spelling setting: text/);
+  writeFileSync(join(dir, 'sample.feature'), '@spell-text=en-GB\nFeature: Account\n');
+  const tag = run(dir, '--only', 'spell', 'sample.feature');
+  assert.notStrictEqual(tag.status, 0);
+  assert.match(tag.stderr, /sample\.feature:1:1:.*unsupported spelling option/);
 });
 
 test('quoted prose can span lines and retains source locations', () => {
@@ -126,4 +120,15 @@ test('quoted prose can span lines and retains source locations', () => {
   assert.notStrictEqual(result.status, 0);
   assert.match(result.stderr, /sample\.feature:3:19:.*quabble/);
   assert.notMatch(result.stderr, /Bahnsteig|Haltestelle|\bund\b/);
+});
+
+test('titles check quoted values as content and surrounding words as specification', () => {
+  const dir = workspace();
+  writeFileSync(join(dir, 'cuke.yml'), 'checks: [spell]\nspelling:\n  content:\n    locales: [en-US, de-DE]\n');
+  writeFileSync(join(dir, 'sample.feature'), 'Feature: "Hinweis" acount\n  Scenario: Show "Leerfahrt" on acount\n    Given a transfer\n');
+  const result = run(dir, '--config', 'cuke.yml', 'sample.feature');
+  assert.notStrictEqual(result.status, 0);
+  assert.match(result.stderr, /sample\.feature:1:20:.*acount/);
+  assert.match(result.stderr, /sample\.feature:2:33:.*acount/);
+  assert.notMatch(result.stderr, /Hinweis|Leerfahrt/);
 });

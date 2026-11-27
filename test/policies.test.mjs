@@ -9,7 +9,7 @@ test('isolates locale word lists and selects shared product dictionaries by poli
   writeFileSync(join(dir, 'dictionary', 'en-US.dic'), 'quabble\n');
   writeFileSync(join(dir, 'dictionary', 'en-GB.dic'), 'florple\n');
   writeFileSync(join(dir, 'dictionary', 'places.dic'), 'wibbleton\n');
-  writeFileSync(join(dir, 'cuke.yml'), 'checks: [spell]\ndictionary: ./dictionary\nspelling:\n  text:\n    dictionaries: [places]\n');
+  writeFileSync(join(dir, 'cuke.yml'), 'checks: [spell]\ndictionary: ./dictionary\n');
   writeFileSync(join(dir, 'sample.feature'), 'Feature: Account\n  Scenario: Transfer\n    Given quabble and wibbleton and florple\n');
   const result = run(dir, '--config', 'cuke.yml', 'sample.feature');
   assert.notStrictEqual(result.status, 0);
@@ -78,8 +78,8 @@ test('inherits locale settings while using all shared dictionaries', () => {
   mkdirSync(join(dir, 'product'));
   writeFileSync(join(dir, 'dictionary', 'places.dic'), 'wibbleton\n');
   writeFileSync(join(dir, 'dictionary', 'terms.dic'), 'florple\n');
-  writeFileSync(join(dir, 'shared.yml'), 'checks: [spell]\ndictionary: dictionary\nspelling:\n  text:\n    locale: en-GB\n    dictionaries: [places]\n');
-  writeFileSync(join(dir, 'product', 'cuke.yml'), 'extends: ../shared.yml\nspelling:\n  text:\n    dictionaries: [terms]\n');
+  writeFileSync(join(dir, 'shared.yml'), 'checks: [spell]\ndictionary: dictionary\nspelling:\n  specification:\n    en: en-GB\n');
+  writeFileSync(join(dir, 'product', 'cuke.yml'), 'extends: ../shared.yml\nspelling:\n  content:\n    locales: [en-US]\n');
   writeFileSync(join(dir, 'sample.feature'), 'Feature: Colour\n  Scenario: Transfer\n    Given florple and wibbleton\n');
   const result = run(dir, '--config', 'product/cuke.yml', 'sample.feature');
   assert.strictEqual(result.status, 0, result.stderr);

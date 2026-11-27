@@ -35,7 +35,7 @@ async function check(inputs: string[], checks: Check[], dictionary: string | und
       if (stat.isDirectory()) {
         for (const entry of readdirSync(path).sort()) await visit(join(path, entry));
       } else if (stat.isFile()) {
-        if (verbose) console.log(`Checking syntax: ${path}`);
+        if (verbose) console.log(`Parsing: ${path}`);
         const parser = new Parser(new AstBuilder(IdGenerator.incrementing()), new GherkinClassicTokenMatcher());
         const source = readFileSync(path, 'utf8');
         const document = parser.parse(source);
@@ -71,7 +71,7 @@ if (process.argv[2] === 'check') {
       else inputs.push(arg);
     }
     const selected = resolveConfiguration(config, only);
-    if (selected.checks.length) await check(inputs, selected.checks, dictionary ?? selected.dictionary, verbose, selected.spelling);
+    await check(inputs, selected.checks, dictionary ?? selected.dictionary, verbose, selected.spelling);
   } catch (error) {
     console.error(error instanceof Error ? error.message : String(error));
     process.exitCode = 1;

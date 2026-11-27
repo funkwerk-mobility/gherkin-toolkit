@@ -53,15 +53,15 @@ test('verbose output shows each check when it starts and avoids duplicate files'
   writeFileSync(join(dir, 'valid.feature'), 'Feature: Account\n  Scenario: Transfer\n    Given an account\n');
   const result = run(dir, '--verbose', '--only', 'spell', '.', 'valid.feature');
   assert.strictEqual(result.status, 0, result.stderr);
-  assert.strictEqual(result.stdout, 'Checking syntax: valid.feature\nChecking spelling: valid.feature\n');
+  assert.strictEqual(result.stdout, 'Parsing: valid.feature\nChecking spelling: valid.feature\n');
   assert.strictEqual(result.stderr, '');
 });
 
-test('verbose reports syntax but not spelling if parsing fails', () => {
+test('verbose reports parsing but not spelling if parsing fails', () => {
   const dir = workspace();
   writeFileSync(join(dir, 'bad.feature'), '# language: unknown\nFeature: Bad\n');
   const result = run(dir, '--verbose', '--only', 'spell', 'bad.feature');
   assert.notStrictEqual(result.status, 0);
-  assert.strictEqual(result.stdout, 'Checking syntax: bad.feature\n');
+  assert.strictEqual(result.stdout, 'Parsing: bad.feature\n');
   assert.match(result.stderr, /bad\.feature:1:1:/);
 });

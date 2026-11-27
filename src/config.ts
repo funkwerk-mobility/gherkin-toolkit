@@ -3,7 +3,7 @@ import { dirname, resolve } from 'node:path';
 import { parse } from 'yaml';
 import { mergeSpelling, parseSpelling, type SpellConfig } from './policies.js';
 
-export type Check = 'syntax' | 'spell';
+export type Check = 'spell';
 export type Configuration = { checks: Check[]; dictionary?: string; spelling?: SpellConfig };
 
 function checks(value: unknown, source: string): Check[] {
@@ -11,7 +11,7 @@ function checks(value: unknown, source: string): Check[] {
     throw new Error(`${source}: checks must be a list of check names`);
   }
   for (const name of value) {
-    if (name !== 'syntax' && name !== 'spell') throw new Error(`${source}: unknown or unavailable check: ${name}`);
+    if (name !== 'spell') throw new Error(`${source}: unknown or unavailable check: ${name}`);
   }
   return value as Check[];
 }
@@ -45,7 +45,7 @@ export function resolveConfiguration(path: string | undefined, only: string[] | 
       if (config.dictionary !== undefined && (typeof config.dictionary !== 'string' || !config.dictionary)) {
         throw new Error(`${file}: dictionary must be a path`);
       }
-      const inherited: Configuration = config.extends === undefined ? { checks: ['syntax'] } : load(resolve(dirname(file), config.extends as string));
+      const inherited: Configuration = config.extends === undefined ? { checks: ['spell'] } : load(resolve(dirname(file), config.extends as string));
       return {
         checks: config.checks === undefined ? inherited.checks : checks(config.checks, file),
         dictionary: config.dictionary === undefined ? inherited.dictionary : resolve(dirname(file), config.dictionary as string),
@@ -53,6 +53,6 @@ export function resolveConfiguration(path: string | undefined, only: string[] | 
       };
     } finally { active.delete(canonical); }
   }
-  const configured: Configuration = path === undefined ? { checks: ['syntax'] } : load(resolve(path));
+  const configured: Configuration = path === undefined ? { checks: ['spell'] } : load(resolve(path));
   return { ...configured, checks: only === undefined ? configured.checks : checks(only, '--only') };
 }
