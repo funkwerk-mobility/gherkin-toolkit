@@ -3,6 +3,7 @@ import { readFileSync, readdirSync, statSync, realpathSync } from 'node:fs';
 import { join } from 'node:path';
 import { AstBuilder, Errors, GherkinClassicTokenMatcher, Parser } from '@cucumber/gherkin';
 import { IdGenerator } from '@cucumber/messages';
+import { selectChecks } from './config.js';
 
 function report(path: string, error: unknown): void {
   process.exitCode = 1;
@@ -40,7 +41,26 @@ function check(inputs: string[]): void {
 }
 
 if (process.argv[2] === 'check') {
-  check(process.argv.slice(3));
+  try {
+    const inputs: string[] = [];
+    let config: string | undefined;
+    let only: string[] | undefined;
+    const args = process.argv.slice(3);
+    for (let i = 0; i < args.length; i++) {
+      const arg = args[i];
+      if (arg === '--config' || arg === '--only') {
+        const value = args[++i];
+        if (!value || value.startsWith('--')) throw new Error(`${arg} requires a value`);
+        if (arg === '--config') config = value;
+        else only = [...(only ?? []), ...value.split(',')];
+      } else if (arg.startsWith('-')) throw new Error(`Unknown option: ${arg}`);
+      else inputs.push(arg);
+    }
+    if (selectChecks(config, only).includes('syntax')) check(inputs);
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : String(error));
+    process.exitCode = 1;
+  }
 } else if (process.argv.length === 2 || process.argv[2] === '--help') {
   console.log('Usage: cuke check [files or directories...]');
 } else {
