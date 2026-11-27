@@ -1,0 +1,4 @@
+# Select this file with: cuke check --config cuke.yml <files or directories>
+checks:
+  - syntax
+  - spell

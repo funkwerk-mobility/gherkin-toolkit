@@ -1,0 +1,17 @@
+import { spawnSync } from 'node:child_process';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join, resolve } from 'node:path';
+import { onTestFinished } from 'vitest';
+
+const cli = resolve('dist/cli.js');
+
+export function workspace() {
+  const dir = mkdtempSync(join(tmpdir(), 'cuke-'));
+  onTestFinished(() => rmSync(dir, { recursive: true, force: true }));
+  return dir;
+}
+
+export function run(dir, ...args) {
+  return spawnSync(process.execPath, [cli, 'check', ...args], { cwd: dir, encoding: 'utf8' });
+}

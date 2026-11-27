@@ -20,7 +20,7 @@ function report(path: string, error: unknown): void {
   }
 }
 
-async function check(inputs: string[], checks: Check[], dictionary?: string): Promise<void> {
+async function check(inputs: string[], checks: Check[], dictionary: string | undefined, verbose: boolean): Promise<void> {
   let spelling: typeof import('./spell.js') | undefined;
   let words: string[] | undefined;
   const seen = new Set<string>();
@@ -34,10 +34,12 @@ async function check(inputs: string[], checks: Check[], dictionary?: string): Pr
       if (stat.isDirectory()) {
         for (const entry of readdirSync(path).sort()) await visit(join(path, entry));
       } else if (stat.isFile()) {
+        if (verbose) console.log(`Checking syntax: ${path}`);
         const parser = new Parser(new AstBuilder(IdGenerator.incrementing()), new GherkinClassicTokenMatcher());
         const source = readFileSync(path, 'utf8');
         const document = parser.parse(source);
         if (checks.includes('spell')) {
+          if (verbose) console.log(`Checking spelling: ${path}`);
           spelling ??= await import('./spell.js');
           words ??= spelling.productWords(dictionary);
           await spelling.checkSpelling(document.feature, source, path, words);
@@ -54,10 +56,12 @@ if (process.argv[2] === 'check') {
     let config: string | undefined;
     let only: string[] | undefined;
     let dictionary: string | undefined;
+    let verbose = false;
     const args = process.argv.slice(3);
     for (let i = 0; i < args.length; i++) {
       const arg = args[i];
-      if (arg === '--config' || arg === '--only' || arg === '--dictionary') {
+      if (arg === '--verbose') verbose = true;
+      else if (arg === '--config' || arg === '--only' || arg === '--dictionary') {
         const value = args[++i];
         if (!value || value.startsWith('--')) throw new Error(`${arg} requires a value`);
         if (arg === '--config') config = value;
@@ -67,13 +71,13 @@ if (process.argv[2] === 'check') {
       else inputs.push(arg);
     }
     const selected = resolveConfiguration(config, only);
-    if (selected.checks.length) await check(inputs, selected.checks, dictionary ?? selected.dictionary);
+    if (selected.checks.length) await check(inputs, selected.checks, dictionary ?? selected.dictionary, verbose);
   } catch (error) {
     console.error(error instanceof Error ? error.message : String(error));
     process.exitCode = 1;
   }
 } else if (process.argv.length === 2 || process.argv[2] === '--help') {
-  console.log('Usage: cuke check [files or directories...]');
+  console.log('Usage: cuke check [--verbose] [files or directories...]');
 } else {
   console.error(`Unknown command: ${process.argv[2]}`);
   process.exitCode = 1;

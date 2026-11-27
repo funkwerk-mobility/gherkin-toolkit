@@ -1,58 +1,67 @@
-import { test } from 'node:test';
-import assert from 'node:assert/strict';
-import { spawnSync } from 'node:child_process';
-import { mkdtempSync, writeFileSync, rmSync, mkdirSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { test, assert } from 'vitest';
+import { writeFileSync, mkdirSync } from 'node:fs';
+import { join } from 'node:path';
+import { workspace, run } from './fixtures.mjs';
 
-const cli = resolve('dist/cli.js');
 test('check accepts a valid feature silently', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'cuke-'));
-  try {
-    const file = join(dir, 'valid.feature');
-    writeFileSync(file, 'Feature: A valid feature\n  Scenario: A scenario\n    Given a step\n');
-    const result = spawnSync(process.execPath, [cli, 'check', file], { encoding: 'utf8' });
-    assert.equal(result.status, 0);
-    assert.equal(result.stdout, '');
-    assert.equal(result.stderr, '');
-  } finally { rmSync(dir, { recursive: true, force: true }); }
+  const dir = workspace();
+  const file = join(dir, 'valid.feature');
+  writeFileSync(file, 'Feature: A valid feature\n  Scenario: A scenario\n    Given a step\n');
+  const result = run(dir, file);
+  assert.strictEqual(result.status, 0);
+  assert.strictEqual(result.stdout, '');
+  assert.strictEqual(result.stderr, '');
 });
 
 test('check discovers nested features once and reports all parse errors', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'cuke-'));
-  try {
-    const nested = join(dir, 'nested');
-    mkdirSync(nested);
-    const first = join(dir, 'first.feature');
-    const second = join(nested, 'second.feature');
-    writeFileSync(first, 'Feature: Bad\n  Scenario: Bad\n    Given one\n      | a | b |\n      | x |\n');
-    writeFileSync(second, 'Feature: Bad\n  Scenario: Bad\n    Given one\n      | a | b |\n      | x |\n');
-    writeFileSync(join(nested, 'ignored.txt'), 'not a feature');
-    const result = spawnSync(process.execPath, [cli, 'check', dir, first], { encoding: 'utf8' });
-    assert.notEqual(result.status, 0);
-    assert.equal(result.stdout, '');
-    assert.ok(result.stderr.includes(`${first}:5:7:`));
-    assert.ok(result.stderr.includes(`${second}:5:7:`));
-    assert.equal(result.stderr.split(first).length - 1, 1);
-  } finally { rmSync(dir, { recursive: true, force: true }); }
+  const dir = workspace();
+  const nested = join(dir, 'nested');
+  mkdirSync(nested);
+  const first = join(dir, 'first.feature');
+  const second = join(nested, 'second.feature');
+  writeFileSync(first, 'Feature: Bad\n  Scenario: Bad\n    Given one\n      | a | b |\n      | x |\n');
+  writeFileSync(second, 'Feature: Bad\n  Scenario: Bad\n    Given one\n      | a | b |\n      | x |\n');
+  writeFileSync(join(nested, 'ignored.txt'), 'not a feature');
+  const result = run(dir, dir, first);
+  assert.notStrictEqual(result.status, 0);
+  assert.strictEqual(result.stdout, '');
+  assert.ok(result.stderr.includes(`${first}:5:7:`));
+  assert.ok(result.stderr.includes(`${second}:5:7:`));
+  assert.strictEqual(result.stderr.split(first).length - 1, 1);
 });
 
 test('check with no inputs succeeds silently', () => {
-  const result = spawnSync(process.execPath, [cli, 'check'], { encoding: 'utf8' });
-  assert.equal(result.status, 0);
-  assert.equal(result.stdout, '');
-  assert.equal(result.stderr, '');
+  const result = run(process.cwd());
+  assert.strictEqual(result.status, 0);
+  assert.strictEqual(result.stdout, '');
+  assert.strictEqual(result.stderr, '');
 });
 
 test('missing inputs fail without preventing other files from being checked', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'cuke-'));
-  try {
-    const bad = join(dir, 'bad.feature');
-    const missing = join(dir, 'missing.feature');
-    writeFileSync(bad, '# language: unknown\nFeature: Bad\n');
-    const result = spawnSync(process.execPath, [cli, 'check', missing, bad], { encoding: 'utf8' });
-    assert.notEqual(result.status, 0);
-    assert.ok(result.stderr.includes(missing));
-    assert.ok(result.stderr.includes(`${bad}:1:1:`));
-  } finally { rmSync(dir, { recursive: true, force: true }); }
+  const dir = workspace();
+  const bad = join(dir, 'bad.feature');
+  const missing = join(dir, 'missing.feature');
+  writeFileSync(bad, '# language: unknown\nFeature: Bad\n');
+  const result = run(dir, missing, bad);
+  assert.notStrictEqual(result.status, 0);
+  assert.ok(result.stderr.includes(missing));
+  assert.ok(result.stderr.includes(`${bad}:1:1:`));
+});
+
+test('verbose output shows each check when it starts and avoids duplicate files', () => {
+  const dir = workspace();
+  writeFileSync(join(dir, 'valid.feature'), 'Feature: Account\n  Scenario: Transfer\n    Given an account\n');
+  const result = run(dir, '--verbose', '--only', 'spell', '.', 'valid.feature');
+  assert.strictEqual(result.status, 0, result.stderr);
+  assert.strictEqual(result.stdout, 'Checking syntax: valid.feature\nChecking spelling: valid.feature\n');
+  assert.strictEqual(result.stderr, '');
+});
+
+test('verbose reports syntax but not spelling if parsing fails', () => {
+  const dir = workspace();
+  writeFileSync(join(dir, 'bad.feature'), '# language: unknown\nFeature: Bad\n');
+  const result = run(dir, '--verbose', '--only', 'spell', 'bad.feature');
+  assert.notStrictEqual(result.status, 0);
+  assert.strictEqual(result.stdout, 'Checking syntax: bad.feature\n');
+  assert.match(result.stderr, /bad\.feature:1:1:/);
 });
