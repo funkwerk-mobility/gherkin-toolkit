@@ -13,5 +13,5 @@ export function workspace() {
 }
 
 export function run(dir, ...args) {
-  return spawnSync(process.execPath, [cli, 'check', ...args], { cwd: dir, encoding: 'utf8' });
+  return spawnSync(process.execPath, [cli, 'check', ...args], { cwd: dir, encoding: 'utf8', env: { ...process.env, HOME: dir, XDG_CONFIG_HOME: join(dir, 'settings') } });
 }

@@ -7,6 +7,7 @@ import type { Feature } from '@cucumber/messages';
 import { resolveConfiguration, type Check } from './config.js';
 import type { SpellConfig } from './policies.js';
 import { Reporter, type OutputFormat } from './diagnostics.js';
+import { configure, rememberedConfiguration } from './configure.js';
 
 function report(reporter: Reporter, path: string, error: unknown): void {
   if (error instanceof Errors.GherkinException) {
@@ -62,6 +63,10 @@ async function check(inputs: string[], checks: Check[], dictionary: string | und
 
 const usage = `Usage: cuke check [options] [files or directories...]
 
+Commands:
+  check                 Check feature files
+  configure             Configure cuke interactively
+
 Options:
   --config <file>       Use a YAML configuration file
   --dictionary <path>   Use a product dictionary directory or file
@@ -72,7 +77,10 @@ Options:
   --verbose             Show checks as they start
   --help                Show this help`;
 
-if (process.argv[2] === 'check' && process.argv.length === 4 && process.argv[3] === '--help') {
+if (process.argv[2] === 'configure') {
+  try { await configure(process.argv.slice(3)); }
+  catch (error) { console.error(error instanceof Error ? error.message : String(error)); process.exitCode = 1; }
+} else if (process.argv[2] === 'check' && process.argv.length === 4 && process.argv[3] === '--help') {
   console.log(usage);
 } else if (process.argv[2] === 'check') {
   let format: OutputFormat = 'human';
@@ -103,7 +111,7 @@ if (process.argv[2] === 'check' && process.argv.length === 4 && process.argv[3] 
       } else if (arg.startsWith('-')) throw new Error(`Unknown option: ${arg}`);
       else inputs.push(arg);
     }
-    const selected = resolveConfiguration(config, only);
+    const selected = resolveConfiguration(config ?? rememberedConfiguration(), only);
     const reporter = new Reporter(format, limit ?? selected.diagnosticLimit ?? 100);
     await check(inputs, selected.checks, dictionary ?? selected.dictionary, verbose, fix, reporter, selected.spelling);
     reporter.finish();

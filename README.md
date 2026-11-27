@@ -40,7 +40,11 @@ checks:
 
 `extends` is optional and resolved relative to the file that declares it. A `checks` list replaces the inherited list; an empty list disables all optional checks. Parsing still runs for every selected file. Without a configuration, spelling is enabled. The available check is `spell`.
 
-Use `cuke check --config product/cuke.yml --only spell features/` to override the configured list for one run. Command-line paths are relative to the working directory. `--only` accepts a comma-separated list or may be repeated. Invalid configurations, unsupported check names and missing option values cause an error. No configuration file is selected automatically.
+Use `cuke check --config product/cuke.yml --only spell features/` to override the configured list for one run. Command-line paths are relative to the working directory. `--only` accepts a comma-separated list or may be repeated. Invalid configurations, unsupported check names and missing option values cause an error.
+
+Run `cuke configure` to create or edit a YAML configuration interactively. Enter a path, then choose whether spelling is enabled and set a product dictionary, specification locales and content locales; select the optional individual region prompts for region locales and fix destinations. Press Enter to leave a setting unchanged. Existing settings and YAML comments are preserved. Paths entered for the dictionary are relative to the configuration file. Other spelling settings can be edited directly in YAML.
+
+The wizard can remember the chosen configuration for subsequent checks. `cuke configure --config product/cuke.yml` opens a specific configuration, `cuke configure --show` displays the remembered path, and `cuke configure --clear` forgets it. The selection is stored in `$XDG_CONFIG_HOME/cuke/selection.json`, or `~/.config/cuke/selection.json` when `XDG_CONFIG_HOME` is unset. Explicit `--config` overrides it. A home configuration such as `~/.cuke.yml` is never selected automatically; enter its path explicitly in the wizard to use it. The configuration path prompt expands a leading `~` or `$HOME`.
 
 ## Spelling
 
