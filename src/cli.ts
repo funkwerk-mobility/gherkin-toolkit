@@ -60,12 +60,23 @@ async function check(inputs: string[], checks: Check[], dictionary: string | und
   }
 }
 
-if (process.argv[2] === 'check') {
+const usage = `Usage: cuke check [options] [files or directories...]
+
+Options:
+  --config <file>       Use a YAML configuration file
+  --dictionary <path>   Use a product dictionary directory or file
+  --only <checks>       Run only the named checks (comma-separated)
+  --fix                 Apply available fixes
+  --json                Output diagnostics as JSON
+  --limit <number>      Maximum diagnostics to display (default: 100)
+  --verbose             Show checks as they start
+  --help                Show this help`;
+
+if (process.argv[2] === 'check' && process.argv.length === 4 && process.argv[3] === '--help') {
+  console.log(usage);
+} else if (process.argv[2] === 'check') {
   let format: OutputFormat = 'human';
-  let errorFormat: OutputFormat = 'human';
-  for (let i = 3; i < process.argv.length; i++) {
-    if (process.argv[i] === '--format' && (process.argv[i + 1] === 'json' || process.argv[i + 1] === 'human')) errorFormat = process.argv[i + 1] as OutputFormat;
-  }
+  const errorFormat: OutputFormat = process.argv.slice(3).includes('--json') ? 'json' : 'human';
   try {
     const inputs: string[] = [];
     let config: string | undefined;
@@ -79,15 +90,13 @@ if (process.argv[2] === 'check') {
       const arg = args[i];
       if (arg === '--verbose') verbose = true;
       else if (arg === '--fix') fix = true;
-      else if (arg === '--config' || arg === '--only' || arg === '--dictionary' || arg === '--format' || arg === '--limit') {
+      else if (arg === '--json') format = 'json';
+      else if (arg === '--config' || arg === '--only' || arg === '--dictionary' || arg === '--limit') {
         const value = args[++i];
         if (!value || value.startsWith('--')) throw new Error(`${arg} requires a value`);
         if (arg === '--limit') {
           if (!/^\d+$/u.test(value) || !Number.isSafeInteger(Number(value))) throw new Error('--limit must be a nonnegative integer');
           limit = Number(value);
-        } else if (arg === '--format') {
-          if (value !== 'human' && value !== 'json') throw new Error(`Unknown output format: ${value}`);
-          format = value;
         } else if (arg === '--config') config = value;
         else if (arg === '--dictionary') dictionary = value;
         else only = [...(only ?? []), ...value.split(',')];
@@ -104,7 +113,7 @@ if (process.argv[2] === 'check') {
     reporter.finish();
   }
 } else if (process.argv.length === 2 || process.argv[2] === '--help') {
-  console.log('Usage: cuke check [--verbose] [files or directories...]');
+  console.log(usage);
 } else {
   console.error(`Unknown command: ${process.argv[2]}`);
   process.exitCode = 1;

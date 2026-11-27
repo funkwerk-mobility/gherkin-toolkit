@@ -193,7 +193,7 @@ export async function checkSpelling(feature: Feature | undefined, source: string
         fixes.add({ location, word, path });
         return;
       }
-      reporter.report({ path: file, line, column: column + (positions?.[offset] ?? offset), rule: forbidden ? 'forbidden-word' : 'unknown-word', severity: 'error', message: `${forbidden ? 'forbidden' : 'unknown'} word: ${word}` });
+      reporter.report({ path: file, line, column: column + (positions?.[offset] ?? offset), rule: forbidden ? 'forbidden-word' : 'unknown-word', severity: 'error', message: `${forbidden ? 'forbidden' : 'unknown'} word: ${word}`, word });
     }
     const issues = await validateText(normalized, entry.settings);
     for (const match of invalid) diagnostic(match.index, value.slice(match.index, match.index + match[0].length), issues.some(issue => issue.isFlagged && issue.offset >= match.index && issue.offset < match.index + match[0].length));

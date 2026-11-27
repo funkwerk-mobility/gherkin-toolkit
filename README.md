@@ -23,10 +23,10 @@ diagnostics:
 
 ```sh
 cuke check --limit 25 features/
-cuke check --format json features/
+cuke check --json features/
 ```
 
-The limit is a nonnegative integer; zero hides all diagnostic details. `--format json` writes one JSON object to standard output with `diagnostics`, `total`, `hidden`, and `fixes`. Each diagnostic contains `rule`, `severity`, and `message`; file-specific findings also include `path` and, where available, `line` and `column`. `fixes` contains human-readable descriptions of applied changes. In JSON mode verbose progress goes to standard error, keeping standard output machine-readable. JSON output is emitted even when there are no findings.
+The limit is a nonnegative integer; zero hides all terminal diagnostic details. `--json` writes one JSON object to standard output with `diagnostics`, `total`, and `fixes`. JSON output includes all diagnostics regardless of the display limit. Each diagnostic contains `rule` and `severity`, plus `word` for spelling findings; file-specific findings also include `path` and, where available, `line` and `column`. JSON diagnostics do not contain messages. `fixes` contains human-readable descriptions of applied changes. In JSON mode verbose progress goes to standard error, keeping standard output machine-readable. JSON output is emitted even when there are no findings.
 
 ## Configuration
 
