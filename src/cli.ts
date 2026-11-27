@@ -3,7 +3,7 @@ import { readFileSync, readdirSync, statSync, realpathSync } from 'node:fs';
 import { join } from 'node:path';
 import { AstBuilder, Errors, GherkinClassicTokenMatcher, Parser } from '@cucumber/gherkin';
 import { IdGenerator } from '@cucumber/messages';
-import { selectChecks } from './config.js';
+import { resolveConfiguration, type Check } from './config.js';
 
 function report(path: string, error: unknown): void {
   process.exitCode = 1;
@@ -20,9 +20,11 @@ function report(path: string, error: unknown): void {
   }
 }
 
-function check(inputs: string[]): void {
+async function check(inputs: string[], checks: Check[], dictionary?: string): Promise<void> {
+  let spelling: typeof import('./spell.js') | undefined;
+  let words: string[] | undefined;
   const seen = new Set<string>();
-  function visit(path: string): void {
+  async function visit(path: string): Promise<void> {
     try {
       const stat = statSync(path);
       if (stat.isFile() && !inputs.includes(path) && !path.endsWith('.feature')) return;
@@ -30,14 +32,20 @@ function check(inputs: string[]): void {
       if (seen.has(realPath)) return;
       seen.add(realPath);
       if (stat.isDirectory()) {
-        for (const entry of readdirSync(path).sort()) visit(join(path, entry));
+        for (const entry of readdirSync(path).sort()) await visit(join(path, entry));
       } else if (stat.isFile()) {
         const parser = new Parser(new AstBuilder(IdGenerator.incrementing()), new GherkinClassicTokenMatcher());
-        parser.parse(readFileSync(path, 'utf8'));
+        const source = readFileSync(path, 'utf8');
+        const document = parser.parse(source);
+        if (checks.includes('spell')) {
+          spelling ??= await import('./spell.js');
+          words ??= spelling.productWords(dictionary);
+          await spelling.checkSpelling(document.feature, source, path, words);
+        }
       }
     } catch (error) { report(path, error); }
   }
-  for (const input of inputs) visit(input);
+  for (const input of inputs) await visit(input);
 }
 
 if (process.argv[2] === 'check') {
@@ -45,18 +53,21 @@ if (process.argv[2] === 'check') {
     const inputs: string[] = [];
     let config: string | undefined;
     let only: string[] | undefined;
+    let dictionary: string | undefined;
     const args = process.argv.slice(3);
     for (let i = 0; i < args.length; i++) {
       const arg = args[i];
-      if (arg === '--config' || arg === '--only') {
+      if (arg === '--config' || arg === '--only' || arg === '--dictionary') {
         const value = args[++i];
         if (!value || value.startsWith('--')) throw new Error(`${arg} requires a value`);
         if (arg === '--config') config = value;
+        else if (arg === '--dictionary') dictionary = value;
         else only = [...(only ?? []), ...value.split(',')];
       } else if (arg.startsWith('-')) throw new Error(`Unknown option: ${arg}`);
       else inputs.push(arg);
     }
-    if (selectChecks(config, only).includes('syntax')) check(inputs);
+    const selected = resolveConfiguration(config, only);
+    if (selected.checks.length) await check(inputs, selected.checks, dictionary ?? selected.dictionary);
   } catch (error) {
     console.error(error instanceof Error ? error.message : String(error));
     process.exitCode = 1;
