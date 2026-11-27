@@ -38,7 +38,19 @@ Enable spelling with `checks: [spell]` in YAML, or run it on its own:
 cuke check --only spell --dictionary spellchecker/ features/
 ```
 
-Spelling supports US English (`en-US`), British English (`en-GB`) and German (`de-DE`). By default the Gherkin dialects `en` and `de` map to `en-US` and `de-DE`. Prose, steps, data tables, Examples headers and values, and untyped docstrings are checked. Typed docstrings are deferred. Syntax is checked before spelling even when only spelling is selected.
+Spelling supports US English (`en-US`), British English (`en-GB`) and German (`de-DE`). By default the Gherkin dialects `en` and `de` map to `en-US` and `de-DE`. Prose, steps, data tables, Examples headers and values, and docstrings are checked. Syntax is checked before spelling even when only spelling is selected.
+
+Docstrings tagged `json` or `application/json` are checked as JSON: property names and string values are checked, including words in identifiers and JSON escapes. Other content types and untyped docstrings are checked as plain text by default. Configure exceptions per content type:
+
+```yaml
+spelling:
+  docStringTypes:
+    application/problem+json: json
+    xml: text
+    binary: ignore
+```
+
+Content-type names are matched case-insensitively against lowercase configuration keys. The modes are `json`, `text` and `ignore`; child configurations override individual keys. The normal docstring language policy applies to checked content. JSON mode scans string tokens and does not validate JSON syntax.
 
 A product dictionary directory contains UTF-8 word lists with one word per line; blank lines and lines starting with `#` are ignored. Locale-specific files are selected only for their locale: `en-US.dic` or `en.dic` for US English, `en-GB.dic` for British English, and `de-DE.dic` or `de.dic` for German. Both corresponding filenames are loaded if present. These files are optional. A direct `--dictionary` file is applied only to the feature's default locale. Forbidden words are planned separately.
 

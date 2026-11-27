@@ -13,12 +13,18 @@ export function spellingLocale(value: string): string {
 
 export type Policy = { locale?: string; locales?: string[]; dictionaries?: string[] };
 export type Region = 'prose' | 'content' | 'quotes' | 'tables' | 'dataTables' | 'examples' | 'docStrings';
-export type SpellConfig = { dialects?: Record<string, string>; specification?: Record<string, string> } & Partial<Record<Region, Policy>>;
+export type SnippetMode = 'json' | 'text' | 'ignore';
+export type SpellConfig = { dialects?: Record<string, string>; specification?: Record<string, string>; docStringTypes?: Record<string, SnippetMode> } & Partial<Record<Region, Policy>>;
 
 export function parseSpelling(value: unknown, source: string): SpellConfig {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error(`${source}: spelling must be a mapping`);
   const result: SpellConfig = {};
   for (const [key, setting] of Object.entries(value)) {
+    if (key === 'docStringTypes') {
+      if (!setting || typeof setting !== 'object' || Array.isArray(setting) || Object.entries(setting).some(([name, mode]) => !name || name !== name.toLowerCase() || !['json', 'text', 'ignore'].includes(mode as string))) throw new Error(`${source}: spelling.docStringTypes must map lowercase content types to json, text or ignore`);
+      result.docStringTypes = setting as Record<string, SnippetMode>;
+      continue;
+    }
     if (key === 'dialects' || key === 'specification') {
       if (!setting || typeof setting !== 'object' || Array.isArray(setting) || Object.values(setting).some(v => typeof v !== 'string' || !v)) {
         throw new Error(`${source}: spelling.${key} must map keyword languages to single locales`);
@@ -51,6 +57,7 @@ export function mergePolicy(base: Policy = {}, override: Policy = {}): Policy {
 
 export function mergeSpelling(base: SpellConfig = {}, override: SpellConfig = {}): SpellConfig {
   const result: SpellConfig = { dialects: { ...base.dialects, ...override.dialects }, specification: { ...base.specification, ...override.specification } };
+  if (base.docStringTypes || override.docStringTypes) result.docStringTypes = { ...base.docStringTypes, ...override.docStringTypes };
   for (const region of ['prose', 'content', 'quotes', 'tables', 'dataTables', 'examples', 'docStrings'] as const) {
     if (base[region] || override[region]) {
       result[region] = mergePolicy(base[region], override[region]);

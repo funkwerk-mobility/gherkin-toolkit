@@ -228,7 +228,9 @@ export async function checkSpelling(feature: Feature | undefined, source: string
       if (step.docString && !ignored(scopes, 'docStrings')) {
         const doc = step.docString;
         const language = /^language[= ](.+)$/u.exec(doc.mediaType ?? '');
-        if (doc.mediaType && !language) continue;
+        const mediaType = doc.mediaType?.toLowerCase();
+        const mode = language || !mediaType ? 'text' : config.docStringTypes?.[mediaType] ?? (mediaType === 'json' || mediaType === 'application/json' ? 'json' : 'text');
+        if (mode === 'ignore') continue;
         const docPolicy = combine(base, 'docStrings', config, ...scopes);
         if (language) { delete docPolicy.locales; docPolicy.locale = language[1]; }
         for (const [i, content] of doc.content.split('\n').entries()) {
@@ -238,12 +240,30 @@ export async function checkSpelling(feature: Feature | undefined, source: string
           const start = Math.min(indent, (doc.location.column ?? 1) - 1);
           const positions: number[] = [];
           let index = start;
-          for (const character of content) {
+          for (const character of content.split('')) {
             if (raw[index] !== character && raw[index] === '\\' && raw[index + 1] === character) index++;
             positions.push(index - start);
             index++;
           }
-          if (content) await text(content, sourceLine, start + 1, docPolicy, positions);
+          if (mode === 'json') {
+            for (const match of content.matchAll(/"(?:\\.|[^"\\])*"/gu)) {
+              let decoded = '';
+              const decodedPositions: number[] = [];
+              const body = match[0].slice(1, -1);
+              for (let i = 0; i < body.length;) {
+                const offset = i;
+                let part = body[i++];
+                if (part === '\\' && i < body.length) {
+                  part += body[i++];
+                  if (part === '\\u') { part += body.slice(i, i + 4); i += 4; }
+                  try { part = JSON.parse(`"${part}"`) as string; } catch { continue; }
+                }
+                decoded += part;
+                for (let j = 0; j < part.length; j++) decodedPositions.push(positions[match.index + 1 + offset] ?? match.index + 1 + offset);
+              }
+              await text(decoded, sourceLine, start + 1, docPolicy, decodedPositions);
+            }
+          } else if (content) await text(content, sourceLine, start + 1, docPolicy, positions);
         }
       }
     }
