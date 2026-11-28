@@ -23,7 +23,7 @@ function report(reporter: Reporter, path: string, error: unknown): void {
   }
 }
 
-async function check(inputs: string[], checks: Check[], dictionary: string | undefined, verbose: boolean, fix: boolean, reporter: Reporter, policies?: SpellConfig): Promise<void> {
+async function check(inputs: string[], checks: Check[], dictionary: string | undefined, verbose: boolean, fix: boolean, reporter: Reporter, policies?: SpellConfig, stepTableHeader = false): Promise<void> {
   let spelling: typeof import('./spell.js') | undefined;
   let fixes: import('./spell.js').SpellingFixes | undefined;
   const checked: { feature?: Feature; source: string; path: string }[] = [];
@@ -47,7 +47,7 @@ async function check(inputs: string[], checks: Check[], dictionary: string | und
           if (verbose) reporter.progress(`Checking spelling: ${path}`);
           spelling ??= await import('./spell.js');
           if (fix) fixes ??= new spelling.SpellingFixes(reporter);
-          await spelling.checkSpelling(document.feature, source, path, dictionary, policies, reporter, fixes);
+          await spelling.checkSpelling(document.feature, source, path, dictionary, policies, reporter, fixes, stepTableHeader);
           if (fix) checked.push({ feature: document.feature, source, path });
         }
       }
@@ -56,7 +56,7 @@ async function check(inputs: string[], checks: Check[], dictionary: string | und
   for (const input of inputs) await visit(input);
   fixes?.apply();
   if (fix && spelling) for (const { feature, source, path } of checked) {
-    try { await spelling.checkSpelling(feature, source, path, dictionary, policies, reporter); }
+    try { await spelling.checkSpelling(feature, source, path, dictionary, policies, reporter, undefined, stepTableHeader); }
     catch (error) { report(reporter, path, error); }
   }
 }
@@ -69,7 +69,7 @@ Commands:
 
 Options:
   --config <file>       Use a YAML configuration file
-  --dictionary <path>   Use a product dictionary directory or file
+  --dictionary <path>   Use a custom dictionary directory or file
   --only <checks>       Run only the named checks (comma-separated)
   --fix                 Apply available fixes
   --json                Output diagnostics as JSON
@@ -113,7 +113,7 @@ if (process.argv[2] === 'configure') {
     }
     const selected = resolveConfiguration(config ?? rememberedConfiguration(), only);
     const reporter = new Reporter(format, limit ?? selected.diagnosticLimit ?? 100);
-    await check(inputs, selected.checks, dictionary ?? selected.dictionary, verbose, fix, reporter, selected.spelling);
+    await check(inputs, selected.checks, dictionary ?? selected.dictionary, verbose, fix, reporter, selected.spell, selected.stepTableHeader);
     reporter.finish();
   } catch (error) {
     const reporter = new Reporter(errorFormat, 100);

@@ -3,7 +3,7 @@ import { writeFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { workspace, run } from './fixtures.mjs';
 
-test('isolates locale word lists and selects shared product dictionaries by policy', () => {
+test('isolates locale word lists and selects shared project dictionaries by policy', () => {
   const dir = workspace();
   mkdirSync(join(dir, 'dictionary'));
   writeFileSync(join(dir, 'dictionary', 'en-US.dic'), 'quabble\n');
@@ -19,7 +19,7 @@ test('isolates locale word lists and selects shared product dictionaries by poli
 
 test('uses a global table language without changing step or Examples header spelling', () => {
   const dir = workspace();
-  writeFileSync(join(dir, 'cuke.yml'), 'checks: [spell]\nspelling:\n  tables:\n    locale: de-DE\n');
+  writeFileSync(join(dir, 'cuke.yml'), 'checks: [spell]\nspell:\n  tables:\n    locale: de-DE\n');
   writeFileSync(join(dir, 'sample.feature'), 'Feature: Account\n  Scenario Outline: Transfer\n    Given Bahnsteig\n      | Bahnsteig |\n    Examples: Values\n      | Bahnsteig |\n      | Bahnsteig |\n');
   const result = run(dir, '--config', 'cuke.yml', 'sample.feature');
   assert.notStrictEqual(result.status, 0);
@@ -39,7 +39,7 @@ test('scenario broad override beats feature specific override, and scenario spec
 
 test('uses dialect mappings and applies the docstring language separately', () => {
   const dir = workspace();
-  writeFileSync(join(dir, 'cuke.yml'), 'checks: [spell]\nspelling:\n  dialects:\n    en: en-GB\n  docStrings:\n    locale: de-DE\n');
+  writeFileSync(join(dir, 'cuke.yml'), 'checks: [spell]\nspell:\n  dialects:\n    en: en-GB\n  docStrings:\n    locale: de-DE\n');
   writeFileSync(join(dir, 'sample.feature'), 'Feature: Colour\n  Scenario: Colour\n    Given the colour\n      """\n      Bahnsteig\n      """\n');
   const result = run(dir, '--config', 'cuke.yml', 'sample.feature');
   assert.strictEqual(result.status, 0, result.stderr);
@@ -66,7 +66,7 @@ test('uses shared dictionaries for text, tables and docstrings', () => {
   const dir = workspace();
   mkdirSync(join(dir, 'dictionary'));
   writeFileSync(join(dir, 'dictionary', 'places.dic'), 'wibbleton\n');
-  writeFileSync(join(dir, 'cuke.yml'), 'checks: [spell]\ndictionary: dictionary\nspelling:\n  dataTables:\n    dictionaries: [places]\n  docStrings:\n    dictionaries: [places]\n');
+  writeFileSync(join(dir, 'cuke.yml'), 'checks: [spell]\ndictionary: dictionary\n');
   writeFileSync(join(dir, 'sample.feature'), 'Feature: Account\n  Scenario: Transfer\n    Given wibbleton\n      | wibbleton |\n    Then transfer\n      """\n      wibbleton\n      """\n');
   const result = run(dir, '--config', 'cuke.yml', 'sample.feature');
   assert.strictEqual(result.status, 0, result.stderr);
@@ -75,19 +75,19 @@ test('uses shared dictionaries for text, tables and docstrings', () => {
 test('inherits locale settings while using all shared dictionaries', () => {
   const dir = workspace();
   mkdirSync(join(dir, 'dictionary'));
-  mkdirSync(join(dir, 'product'));
+  mkdirSync(join(dir, 'project'));
   writeFileSync(join(dir, 'dictionary', 'places.dic'), 'wibbleton\n');
   writeFileSync(join(dir, 'dictionary', 'terms.dic'), 'florple\n');
-  writeFileSync(join(dir, 'shared.yml'), 'checks: [spell]\ndictionary: dictionary\nspelling:\n  specification:\n    en: en-GB\n');
-  writeFileSync(join(dir, 'product', 'cuke.yml'), 'extends: ../shared.yml\nspelling:\n  content:\n    locales: [en-US]\n');
+  writeFileSync(join(dir, 'shared.yml'), 'checks: [spell]\ndictionary: dictionary\nspell:\n  specification:\n    en: en-GB\n');
+  writeFileSync(join(dir, 'project', 'cuke.yml'), 'extends: ../shared.yml\nspell:\n  content:\n    locales: [en-US]\n');
   writeFileSync(join(dir, 'sample.feature'), 'Feature: Colour\n  Scenario: Transfer\n    Given florple and wibbleton\n');
-  const result = run(dir, '--config', 'product/cuke.yml', 'sample.feature');
+  const result = run(dir, '--config', 'project/cuke.yml', 'sample.feature');
   assert.strictEqual(result.status, 0, result.stderr);
 });
 
 test('rejects unsupported configured locales before checking files', () => {
   const dir = workspace();
-  writeFileSync(join(dir, 'cuke.yml'), 'spelling:\n  tables:\n    locale: xx-ZZ\n');
+  writeFileSync(join(dir, 'cuke.yml'), 'spell:\n  tables:\n    locale: xx-ZZ\n');
   const result = run(dir, '--config', 'cuke.yml');
   assert.notStrictEqual(result.status, 0);
   assert.match(result.stderr, /unsupported spelling language: xx-ZZ/);

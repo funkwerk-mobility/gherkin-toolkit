@@ -16,8 +16,8 @@ test('checks JSON property names and values, including repeated and escaped word
 
 test('configures content type handling without ignoring other docstrings', () => {
   const dir = workspace();
-  writeFileSync(join(dir, 'shared.yml'), 'spelling:\n  docStringTypes:\n    xml: ignore\n    custom: json\n');
-  writeFileSync(join(dir, 'cuke.yml'), 'extends: shared.yml\nspelling:\n  docStringTypes:\n    xml: text\n    json: ignore\n');
+  writeFileSync(join(dir, 'shared.yml'), 'spell:\n  docStringTypes:\n    xml: ignore\n    custom: json\n');
+  writeFileSync(join(dir, 'cuke.yml'), 'extends: shared.yml\nspell:\n  docStringTypes:\n    xml: text\n    json: ignore\n');
   writeFileSync(join(dir, 'sample.feature'), 'Feature: Account\n  Scenario: Transfer\n    Given a message\n      """xml\n      acount\n      """\n    And another message\n      """json\n      {"acount": "acount"}\n      """\n    And a custom message\n      """custom\n      {"acount": 123}\n      """\n');
   const result = run(dir, '--config', 'cuke.yml', 'sample.feature');
   assert.notStrictEqual(result.status, 0);

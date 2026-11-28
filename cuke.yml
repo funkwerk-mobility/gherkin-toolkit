@@ -1,4 +1,11 @@
-checks: [spell]
-spelling:
-  content:
-    locales: [en-US, de-DE]
+checks:
+  - spell
+spell:
+  content: { locales: [en-US, de-DE] }
+  prose: {}
+  docStrings: {}
+  tables: {}
+  dataTables: {}
+tables:
+  stepHeader: true
+dictionary: spellchecker

@@ -11,38 +11,36 @@ export function spellingLocale(value: string): string {
   return locale;
 }
 
-export type Policy = { locale?: string; locales?: string[]; dictionaries?: string[]; fixDestination?: string };
+export type Policy = { locale?: string; locales?: string[] };
 export type Region = 'prose' | 'content' | 'quotes' | 'tables' | 'dataTables' | 'examples' | 'docStrings';
 export type SnippetMode = 'json' | 'text' | 'ignore';
 export type SpellConfig = { dialects?: Record<string, string>; specification?: Record<string, string>; docStringTypes?: Record<string, SnippetMode> } & Partial<Record<Region, Policy>>;
 
 export function parseSpelling(value: unknown, source: string): SpellConfig {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error(`${source}: spelling must be a mapping`);
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error(`${source}: spell must be a mapping`);
   const result: SpellConfig = {};
   for (const [key, setting] of Object.entries(value)) {
     if (key === 'docStringTypes') {
-      if (!setting || typeof setting !== 'object' || Array.isArray(setting) || Object.entries(setting).some(([name, mode]) => !name || name !== name.toLowerCase() || !['json', 'text', 'ignore'].includes(mode as string))) throw new Error(`${source}: spelling.docStringTypes must map lowercase content types to json, text or ignore`);
+      if (!setting || typeof setting !== 'object' || Array.isArray(setting) || Object.entries(setting).some(([name, mode]) => !name || name !== name.toLowerCase() || !['json', 'text', 'ignore'].includes(mode as string))) throw new Error(`${source}: spell.docStringTypes must map lowercase content types to json, text or ignore`);
       result.docStringTypes = setting as Record<string, SnippetMode>;
       continue;
     }
     if (key === 'dialects' || key === 'specification') {
       if (!setting || typeof setting !== 'object' || Array.isArray(setting) || Object.values(setting).some(v => typeof v !== 'string' || !v)) {
-        throw new Error(`${source}: spelling.${key} must map keyword languages to single locales`);
+        throw new Error(`${source}: spell.${key} must map keyword languages to single locales`);
       }
       for (const locale of Object.values(setting)) spellingLocale(locale as string);
       result[key] = setting as Record<string, string>;
       continue;
     }
-    if (!['prose', 'content', 'quotes', 'tables', 'dataTables', 'examples', 'docStrings'].includes(key)) throw new Error(`${source}: unknown spelling setting: ${key}`);
-    if (!setting || typeof setting !== 'object' || Array.isArray(setting)) throw new Error(`${source}: spelling.${key} must be a mapping`);
+    if (!['prose', 'content', 'quotes', 'tables', 'dataTables', 'examples', 'docStrings'].includes(key)) throw new Error(`${source}: unknown spell setting: ${key}`);
+    if (!setting || typeof setting !== 'object' || Array.isArray(setting)) throw new Error(`${source}: spell.${key} must be a mapping`);
     const policy = setting as Record<string, unknown>;
-    if (Object.keys(policy).some(k => k !== 'locale' && k !== 'locales' && k !== 'dictionaries' && k !== 'fixDestination')) throw new Error(`${source}: unknown spelling.${key} setting`);
-    if (policy.fixDestination !== undefined && (typeof policy.fixDestination !== 'string' || !/^[\p{L}\p{N}_-]+(?:\.dic)?$/u.test(policy.fixDestination))) throw new Error(`${source}: spelling.${key}.fixDestination must be a dictionary name`);
-    if (policy.locale !== undefined && (typeof policy.locale !== 'string' || !policy.locale)) throw new Error(`${source}: spelling.${key}.locale must be a locale`);
-    if (policy.locales !== undefined && (!Array.isArray(policy.locales) || !policy.locales.length || policy.locales.some(v => typeof v !== 'string' || !v))) throw new Error(`${source}: spelling.${key}.locales must be a nonempty list of locales`);
-    if (policy.locale !== undefined && policy.locales !== undefined) throw new Error(`${source}: spelling.${key} cannot specify both locale and locales`);
+    if (Object.keys(policy).some(k => k !== 'locale' && k !== 'locales')) throw new Error(`${source}: unknown spell.${key} setting`);
+    if (policy.locale !== undefined && (typeof policy.locale !== 'string' || !policy.locale)) throw new Error(`${source}: spell.${key}.locale must be a locale`);
+    if (policy.locales !== undefined && (!Array.isArray(policy.locales) || !policy.locales.length || policy.locales.some(v => typeof v !== 'string' || !v))) throw new Error(`${source}: spell.${key}.locales must be a nonempty list of locales`);
+    if (policy.locale !== undefined && policy.locales !== undefined) throw new Error(`${source}: spell.${key} cannot specify both locale and locales`);
     if (Array.isArray(policy.locales)) for (const locale of policy.locales) spellingLocale(locale as string);
-    if (policy.dictionaries !== undefined && (!Array.isArray(policy.dictionaries) || policy.dictionaries.some(v => typeof v !== 'string' || !/^[\p{L}\p{N}_-]+$/u.test(v)))) throw new Error(`${source}: spelling.${key}.dictionaries must be a list of dictionary names`);
     if (typeof policy.locale === 'string') spellingLocale(policy.locale);
     result[key as Region] = policy as Policy;
   }

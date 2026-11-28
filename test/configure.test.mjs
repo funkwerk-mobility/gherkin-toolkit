@@ -2,6 +2,7 @@ import { test, assert } from 'vitest';
 import { spawnSync } from 'node:child_process';
 import { mkdirSync, writeFileSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
+import { parse } from 'yaml';
 import { workspace } from './fixtures.mjs';
 
 const cli = resolve('dist/cli.js');
@@ -19,16 +20,13 @@ function wizard(dir, steps, ...args) {
 }
 const down = '\u001b[B';
 
-test('selects checks and remembers a configuration while preserving other settings', () => {
+test('skips spelling questions when spelling is deselected and remembers the configuration', () => {
   const dir = workspace();
   writeFileSync(join(dir, 'cuke.yml'), '# Team settings\nchecks: [spell]\ndiagnostics:\n  limit: 17\n');
-  const result = wizard(dir, [
-    ['Configuration file', '\r'],
-    ['What would you like to configure?', ' \r'],
-    ['Checks to run by default', ' \r'],
-    ['Remember this configuration', '\u001b[D\r'],
-  ]);
+  const result = wizard(dir, [['Configuration file', '\r'], ['Checks to run by default', ' \r'], ['Step data tables have a header row?', '\r']]);
   assert.strictEqual(result.status, 0, result.output);
+  assert.match(result.output, /Saved and selected configuration: cuke\.yml/);
+  assert.notMatch(result.output, /Custom dictionary path|Specification language|spelling language overrides/);
   const yaml = readFileSync(join(dir, 'cuke.yml'), 'utf8');
   assert.match(yaml, /# Team settings/);
   assert.match(yaml, /limit: 17/);
@@ -37,25 +35,59 @@ test('selects checks and remembers a configuration while preserving other settin
   assert.match(cuke(dir, 'configure', '--show').stdout, /cuke\.yml/);
 });
 
-test('selects a region and languages while preserving unrelated spelling policies', () => {
+test('offers all overrides together and checks selected table values in two languages', () => {
   const dir = workspace();
   mkdirSync(join(dir, 'dictionary'));
-  writeFileSync(join(dir, 'cuke.yml'), 'dictionary: dictionary\nspelling:\n  docStrings:\n    locale: en-GB\n');
+  writeFileSync(join(dir, 'cuke.yml'), 'dictionary: dictionary\nspell:\n  docStrings:\n    locale: en-GB\n');
   const result = wizard(dir, [
-    ['What would you like to configure?', `${down}${down}${down} \r`],
-    ['Which spelling regions', `${down}${down}${down} \r`],
-    ['tables: language policy', `${down}\r`],
-    ['tables: languages', ` ${down}${down} \r`],
-    ['tables: fix dictionary name', 'places\r'],
-    ['Remember this configuration', `${down}\r`],
+    ['Checks to run by default', '\r'],
+    ['Step data tables have a header row?', '\r'],
+    ['Custom dictionary path', '\r'],
+    ['Specification language for English', '\r'],
+    ['Which spelling language overrides', `${down}${down}${down}${down} \r`],
+    ['Step data tables: languages', `${down}${down} \r`],
+    ['Docstrings: languages', '\r'],
   ], '--config', 'cuke.yml');
   assert.strictEqual(result.status, 0, result.output);
-  const yaml = readFileSync(join(dir, 'cuke.yml'), 'utf8');
-  assert.match(yaml, /locale: en-GB/);
+  assert.notMatch(result.output, /Specification language for German|fix dictionary name/);
+  const plain = result.output.replace(/\x1b\[[0-9;?]*[A-Za-z]/g, '');
+  assert.match(plain, /Step data tables: languages\s*\n[^\n]*English \(United States\), German/);
+  assert.match(plain, /> All tables/);
+  assert.match(plain, /> > Step data tables/);
+  assert.match(plain, /> > Examples tables/);
+  assert.match(plain, /> Docstrings/);
+  assert.notMatch(plain, /> > Step data tables: languages/);
+  assert.match(readFileSync(join(dir, 'cuke.yml'), 'utf8'), /locale: en-GB/);
   writeFileSync(join(dir, 'sample.feature'), 'Feature: Account\n  Scenario: Transfer\n    Given a station\n      | Bahnsteig | florple |\n');
   const checked = cuke(dir, 'check', '--config', 'cuke.yml', '--fix', 'sample.feature');
   assert.strictEqual(checked.status, 0, checked.stderr);
-  assert.match(readFileSync(join(dir, 'dictionary', 'places.dic'), 'utf8'), /florple/);
+  assert.match(readFileSync(join(dir, 'dictionary', 'en.dic'), 'utf8'), /florple/);
+});
+
+test('the default dictionary is relative to the working directory even for a nested config', () => {
+  const dir = workspace();
+  mkdirSync(join(dir, 'config'));
+  mkdirSync(join(dir, 'spellchecker'));
+  writeFileSync(join(dir, 'spellchecker', 'terms.dic'), 'florple\n');
+  const configured = wizard(dir, [
+    ['Checks to run by default', '\r'], ['Step data tables have a header row?', '\r'], ['Custom dictionary path', '\r'],
+    ['Specification language for English', '\r'], ['Which spelling language overrides', '\r'],
+  ], '--config', 'config/cuke.yml');
+  assert.strictEqual(configured.status, 0, configured.output);
+  assert.match(readFileSync(join(dir, 'config', 'cuke.yml'), 'utf8'), /\.\.\/spellchecker/);
+  writeFileSync(join(dir, 'sample.feature'), 'Feature: florple\n');
+  assert.strictEqual(cuke(dir, 'check', 'sample.feature').status, 0);
+});
+
+test('the wizard records the step table header convention', () => {
+  const dir = workspace();
+  const result = wizard(dir, [
+    ['Checks to run by default', '\r'], ['Step data tables have a header row?', '\u001b[D\r'],
+    ['Custom dictionary path', '\r'], ['Specification language for English', '\r'],
+    ['Which spelling language overrides', '\r'],
+  ], '--config', 'cuke.yml');
+  assert.strictEqual(result.status, 0, result.output);
+  assert.strictEqual(parse(readFileSync(join(dir, 'cuke.yml'), 'utf8')).tables.stepHeader, true);
 });
 
 test('explicit config overrides remembered config and clear removes the selection', () => {
@@ -63,21 +95,18 @@ test('explicit config overrides remembered config and clear removes the selectio
   writeFileSync(join(dir, 'first.yml'), 'checks: []\n');
   writeFileSync(join(dir, 'second.yml'), 'checks: [spell]\n');
   writeFileSync(join(dir, 'sample.feature'), 'Feature: florple\n');
-  const configured = wizard(dir, [['What would you like to configure?', '\r'], ['Remember this configuration', '\u001b[D\r']], '--config', 'first.yml');
+  const configured = wizard(dir, [['Checks to run by default', '\r'], ['Step data tables have a header row?', '\r']], '--config', 'first.yml');
   assert.strictEqual(configured.status, 0, configured.output);
   assert.strictEqual(cuke(dir, 'check', 'sample.feature').status, 0);
   assert.notStrictEqual(cuke(dir, 'check', '--config', 'second.yml', 'sample.feature').status, 0);
   assert.strictEqual(cuke(dir, 'configure', '--clear').status, 0);
   assert.match(cuke(dir, 'configure', '--show').stdout, /No configuration selected/);
-  assert.notStrictEqual(cuke(dir, 'check', 'sample.feature').status, 0);
 });
 
-test('does not activate a home file implicitly and leaves files untouched when cancelled', () => {
+test('escape leaves the file and remembered configuration untouched', () => {
   const dir = workspace();
   writeFileSync(join(dir, '.cuke.yml'), 'checks: []\n');
-  writeFileSync(join(dir, 'sample.feature'), 'Feature: florple\n');
-  assert.notStrictEqual(cuke(dir, 'check', 'sample.feature').status, 0);
-  const result = wizard(dir, [['Configuration file', '$HOME/.cuke.yml\r'], ['What would you like to configure?', '\u0003']]);
+  const result = wizard(dir, [['Checks to run by default', '\u001b']], '--config', '.cuke.yml');
   assert.notStrictEqual(result.status, 0);
   assert.strictEqual(readFileSync(join(dir, '.cuke.yml'), 'utf8'), 'checks: []\n');
   assert.match(cuke(dir, 'configure', '--show').stdout, /No configuration selected/);

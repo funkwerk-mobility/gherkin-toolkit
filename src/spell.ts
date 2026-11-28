@@ -107,7 +107,7 @@ export class SpellingFixes {
       }
       groups.set(candidate.path, [...(groups.get(candidate.path) ?? []), candidate]);
     }
-    if (missingDictionary) this.reporter.report({ rule: 'missing-dictionary', severity: 'error', message: 'Cannot fix spelling without a product dictionary.' });
+    if (missingDictionary) this.reporter.report({ rule: 'missing-dictionary', severity: 'error', message: 'Cannot fix spelling without a custom dictionary.' });
     for (const [path, candidates] of groups) {
       try {
         const original = existsSync(path) ? readFileSync(path, 'utf8') : '';
@@ -135,7 +135,7 @@ export class SpellingFixes {
   }
 }
 
-export async function checkSpelling(feature: Feature | undefined, source: string, file: string, dictionaryDir: string | undefined, config: SpellConfig = {}, reporter: Reporter, fixes?: SpellingFixes): Promise<void> {
+export async function checkSpelling(feature: Feature | undefined, source: string, file: string, dictionaryDir: string | undefined, config: SpellConfig = {}, reporter: Reporter, fixes?: SpellingFixes, stepTableHeader = false): Promise<void> {
   if (!feature) return;
   const defaultLocale = spellingLocale(config.specification?.[feature.language] ?? config.dialects?.[feature.language] ?? feature.language);
   const lines = source.split(/\r?\n/u);
@@ -152,8 +152,7 @@ export async function checkSpelling(feature: Feature | undefined, source: string
   async function text(value: string, line: number, column: number, policy: Policy, positions?: number[]) {
     if (!value) return;
     const selectedLocales = (policy.locales ?? [policy.locale ?? defaultLocale]).map(spellingLocale);
-    const names = policy.dictionaries ?? [];
-    const key = JSON.stringify([selectedLocales, names]);
+    const key = JSON.stringify(selectedLocales);
     let entry = cache.get(key);
     if (!entry) {
       const definitions = selectedLocales.map(locale => {
@@ -169,13 +168,8 @@ export async function checkSpelling(feature: Feature | undefined, source: string
             if (existsSync(wordFile)) words.push(...readWords(wordFile));
           }
         }
-        for (const name of names) {
-          if (isLanguageDictionary(name)) throw new Error(`locale dictionary cannot be used as a shared dictionary: ${name}`);
-          if (!sharedFiles.includes(`${name}.dic`)) throw new Error(`shared dictionary not found: ${join(dictionaryDir, `${name}.dic`)}`);
-        }
         for (const sharedFile of sharedFiles) words.push(...readWords(join(dictionaryDir, sharedFile)));
       } else {
-        if (names.length) throw new Error('shared dictionaries require a dictionary directory');
         if (dictionaryDir && selectedLocales.includes(defaultLocale)) words.push(...readWords(dictionaryDir));
       }
       const settings = { dictionaryDefinitions: definitions, dictionaries: selectedLocales, minWordLength: 2, words: words.filter(word => !word.startsWith('!')), flagWords: words.filter(word => word.startsWith('!')).map(word => word.slice(1)) };
@@ -188,7 +182,7 @@ export async function checkSpelling(feature: Feature | undefined, source: string
       const location = `${file}:${line}:${column + (positions?.[offset] ?? offset)}`;
       if (fixes && forbidden) return;
       if (fixes && !forbidden) {
-        const destination = policy.fixDestination ? `${policy.fixDestination.replace(/\.dic$/u, '')}.dic` : `${locales[defaultLocale].short ?? defaultLocale}.dic`;
+        const destination = `${locales[defaultLocale].short ?? defaultLocale}.dic`;
         const path = dictionaryDir && directoryStat?.isDirectory() ? join(dictionaryDir, destination) : dictionaryDir;
         fixes.add({ location, word, path });
         return;
@@ -275,7 +269,9 @@ export async function checkSpelling(feature: Feature | undefined, source: string
       const line = step.location.line;
       const pos = lines[line - 1].indexOf(step.text, (step.location.column ?? 1) - 1 + step.keyword.length);
       await textWithQuotes(step.text, line, pos + 1, textPolicy, combine(base, 'quotes', config, ...scopes));
-      if (step.dataTable && !ignored(scopes, 'tables')) for (const item of step.dataTable.rows) await row(item, combine(base, 'dataTables', config, ...scopes));
+      if (step.dataTable && !ignored(scopes, 'tables')) for (const [index, item] of step.dataTable.rows.entries()) {
+        await row(item, stepTableHeader && index === 0 ? base : combine(base, 'dataTables', config, ...scopes));
+      }
       if (step.docString && !ignored(scopes, 'docStrings')) {
         const doc = step.docString;
         const language = /^language[= ](.+)$/u.exec(doc.mediaType ?? '');

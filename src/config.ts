@@ -4,7 +4,7 @@ import { parse } from 'yaml';
 import { mergeSpelling, parseSpelling, type SpellConfig } from './policies.js';
 
 export type Check = 'spell';
-export type Configuration = { checks: Check[]; dictionary?: string; spelling?: SpellConfig; diagnosticLimit?: number };
+export type Configuration = { checks: Check[]; dictionary?: string; spell?: SpellConfig; diagnosticLimit?: number; stepTableHeader?: boolean };
 
 function checks(value: unknown, source: string): Check[] {
   if (!Array.isArray(value) || value.some(item => typeof item !== 'string')) {
@@ -37,13 +37,17 @@ export function resolveConfiguration(path: string | undefined, only: string[] | 
       if (typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error(`${file}: configuration must be a mapping`);
       const config = parsed as Record<string, unknown>;
       for (const key of Object.keys(config)) {
-        if (key !== 'checks' && key !== 'extends' && key !== 'dictionary' && key !== 'spelling' && key !== 'diagnostics') throw new Error(`${file}: unknown setting: ${key}`);
+        if (key !== 'checks' && key !== 'extends' && key !== 'dictionary' && key !== 'spell' && key !== 'diagnostics' && key !== 'tables') throw new Error(`${file}: unknown setting: ${key}`);
       }
       if (config.extends !== undefined && (typeof config.extends !== 'string' || !config.extends)) {
         throw new Error(`${file}: extends must be a path`);
       }
       if (config.dictionary !== undefined && (typeof config.dictionary !== 'string' || !config.dictionary)) {
         throw new Error(`${file}: dictionary must be a path`);
+      }
+      if (config.tables !== undefined) {
+        const tables = config.tables;
+        if (!tables || typeof tables !== 'object' || Array.isArray(tables) || Object.keys(tables).some(key => key !== 'stepHeader') || (Object.hasOwn(tables, 'stepHeader') && typeof (tables as Record<string, unknown>).stepHeader !== 'boolean')) throw new Error(`${file}: tables.stepHeader must be a boolean`);
       }
       if (config.diagnostics !== undefined) {
         const diagnostics = config.diagnostics;
@@ -55,8 +59,9 @@ export function resolveConfiguration(path: string | undefined, only: string[] | 
       return {
         checks: config.checks === undefined ? inherited.checks : checks(config.checks, file),
         dictionary: config.dictionary === undefined ? inherited.dictionary : resolve(dirname(file), config.dictionary as string),
-        spelling: mergeSpelling(inherited.spelling, config.spelling === undefined ? undefined : parseSpelling(config.spelling, file)),
+        spell: mergeSpelling(inherited.spell, config.spell === undefined ? undefined : parseSpelling(config.spell, file)),
         diagnosticLimit: (config.diagnostics as { limit?: number } | undefined)?.limit ?? inherited.diagnosticLimit,
+        stepTableHeader: (config.tables as { stepHeader?: boolean } | undefined)?.stepHeader ?? inherited.stepTableHeader,
       };
     } finally { active.delete(canonical); }
   }

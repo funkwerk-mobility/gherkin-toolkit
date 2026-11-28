@@ -3,14 +3,32 @@ import { writeFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { workspace, run } from './fixtures.mjs';
 
-
-test('a product check list replaces the inherited list', () => {
+test('uses spell as the configuration section name', () => {
   const dir = workspace();
-  mkdirSync(join(dir, 'product'));
+  writeFileSync(join(dir, 'cuke.yml'), 'spelling: {}\n');
+  const result = run(dir, '--config', 'cuke.yml');
+  assert.notStrictEqual(result.status, 0);
+  assert.match(result.stderr, /unknown setting: spelling/);
+});
+
+test('rejects dictionary settings on individual spelling regions', () => {
+  const dir = workspace();
+  for (const setting of ['fixDestination: places', 'dictionaries: [places]']) {
+    writeFileSync(join(dir, 'cuke.yml'), `spell:\n  tables:\n    ${setting}\n`);
+    const result = run(dir, '--config', 'cuke.yml');
+    assert.notStrictEqual(result.status, 0);
+    assert.match(result.stderr, /unknown spell\.tables setting/);
+  }
+});
+
+
+test('a project check list replaces the inherited list', () => {
+  const dir = workspace();
+  mkdirSync(join(dir, 'project'));
   writeFileSync(join(dir, 'shared.yml'), 'checks: [spell]\n');
-  writeFileSync(join(dir, 'product', 'cuke.yml'), 'extends: ../shared.yml\nchecks: []\n');
+  writeFileSync(join(dir, 'project', 'cuke.yml'), 'extends: ../shared.yml\nchecks: []\n');
   writeFileSync(join(dir, 'bad.feature'), 'Feature: Account\n  Scenario: Transfer\n    Given acount\n');
-  const result = run(dir, '--config', 'product/cuke.yml', 'bad.feature');
+  const result = run(dir, '--config', 'project/cuke.yml', 'bad.feature');
   assert.strictEqual(result.status, 0, result.stderr);
   assert.strictEqual(result.stdout, '');
   assert.strictEqual(result.stderr, '');
@@ -48,12 +66,12 @@ test('cyclic configuration inheritance fails instead of recursing indefinitely',
 test('inherits checks through paths relative to each configuration file', () => {
   const dir = workspace();
   mkdirSync(join(dir, 'shared'));
-  mkdirSync(join(dir, 'product'));
+  mkdirSync(join(dir, 'project'));
   writeFileSync(join(dir, 'base.yml'), 'checks: [spell]\n');
   writeFileSync(join(dir, 'shared', 'team.yml'), 'extends: ../base.yml\n');
-  writeFileSync(join(dir, 'product', 'product.yml'), 'extends: ../shared/team.yml\n');
+  writeFileSync(join(dir, 'project', 'project.yml'), 'extends: ../shared/team.yml\n');
   writeFileSync(join(dir, 'bad.feature'), '# language: unknown\nFeature: Bad\n');
-  const result = run(dir, '--config', 'product/product.yml', 'bad.feature');
+  const result = run(dir, '--config', 'project/project.yml', 'bad.feature');
   assert.notStrictEqual(result.status, 0);
   assert.ok(result.stderr.includes('bad.feature:1:1:'));
 });
