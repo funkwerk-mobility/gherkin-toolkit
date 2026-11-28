@@ -1,4 +1,4 @@
-# Cuke
+# Multitool for clean Gherkin
 
 Cuke helps teams keep Gherkin feature files readable and consistent. It checks spelling in multiple languages and formats features, with configurable rules for quoted content, tables and docstrings.
 
@@ -20,6 +20,8 @@ cuke format features/ path/to/example.feature
 ```
 
 Directories are searched recursively; you can also supply files or shell-expanded globs. With no paths, `check` succeeds silently. Parsing always runs; spelling is enabled by default. A successful check produces no output. Add `--verbose` to see progress or `--json` for machine-readable diagnostics.
+
+Try the [spelling and formatting showcases](features/doc/README.md) for examples with intentional findings.
 
 ## Configure your checks
 

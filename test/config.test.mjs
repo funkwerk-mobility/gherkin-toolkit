@@ -1,7 +1,7 @@
 import { test, assert } from 'vitest';
 import { writeFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
-import { workspace, run } from './fixtures.mjs';
+import { workspace, run, outdent } from './fixtures.mjs';
 
 test('uses spell as the configuration section name', () => {
   const dir = workspace();
@@ -26,8 +26,15 @@ test('a project check list replaces the inherited list', () => {
   const dir = workspace();
   mkdirSync(join(dir, 'project'));
   writeFileSync(join(dir, 'shared.yml'), 'checks: [spell]\n');
-  writeFileSync(join(dir, 'project', 'cuke.yml'), 'extends: ../shared.yml\nchecks: []\n');
-  writeFileSync(join(dir, 'bad.feature'), 'Feature: Account\n  Scenario: Transfer\n    Given acount\n');
+  writeFileSync(join(dir, 'project', 'cuke.yml'), outdent`
+    extends: ../shared.yml
+    checks: []
+  `);
+  writeFileSync(join(dir, 'bad.feature'), outdent`
+    Feature: Account
+      Scenario: Transfer
+        Given acount
+  `);
   const result = run(dir, '--config', 'project/cuke.yml', 'bad.feature');
   assert.strictEqual(result.status, 0, result.stderr);
   assert.strictEqual(result.stdout, '');
@@ -37,7 +44,11 @@ test('a project check list replaces the inherited list', () => {
 test('--only enables spelling when the selected configuration disables it', () => {
   const dir = workspace();
   writeFileSync(join(dir, 'cuke.yml'), 'checks: []\n');
-  writeFileSync(join(dir, 'bad.feature'), 'Feature: Account\n  Scenario: Transfer\n    Given acount\n');
+  writeFileSync(join(dir, 'bad.feature'), outdent`
+    Feature: Account
+      Scenario: Transfer
+        Given acount
+  `);
   const result = run(dir, '--config', 'cuke.yml', '--only', 'spell', 'bad.feature');
   assert.notStrictEqual(result.status, 0);
   assert.ok(result.stderr.includes('bad.feature:3:11:'), result.stderr);
@@ -70,7 +81,10 @@ test('inherits checks through paths relative to each configuration file', () => 
   writeFileSync(join(dir, 'base.yml'), 'checks: [spell]\n');
   writeFileSync(join(dir, 'shared', 'team.yml'), 'extends: ../base.yml\n');
   writeFileSync(join(dir, 'project', 'project.yml'), 'extends: ../shared/team.yml\n');
-  writeFileSync(join(dir, 'bad.feature'), '# language: unknown\nFeature: Bad\n');
+  writeFileSync(join(dir, 'bad.feature'), outdent`
+    # language: unknown
+    Feature: Bad
+  `);
   const result = run(dir, '--config', 'project/project.yml', 'bad.feature');
   assert.notStrictEqual(result.status, 0);
   assert.ok(result.stderr.includes('bad.feature:1:1:'));
@@ -87,7 +101,10 @@ test('malformed YAML is reported even without feature files', () => {
 test('parses input even when all checks are disabled', () => {
   const dir = workspace();
   writeFileSync(join(dir, 'cuke.yml'), 'checks: []\n');
-  writeFileSync(join(dir, 'bad.feature'), '# language: unknown\nFeature: Bad\n');
+  writeFileSync(join(dir, 'bad.feature'), outdent`
+    # language: unknown
+    Feature: Bad
+  `);
   const result = run(dir, '--config', 'cuke.yml', 'bad.feature');
   assert.notStrictEqual(result.status, 0);
   assert.match(result.stderr, /bad\.feature:1:1:/);
@@ -95,7 +112,11 @@ test('parses input even when all checks are disabled', () => {
 
 test('spelling is enabled by default and syntax is not a selectable check', () => {
   const dir = workspace();
-  writeFileSync(join(dir, 'sample.feature'), 'Feature: Account\n  Scenario: Transfer\n    Given acount\n');
+  writeFileSync(join(dir, 'sample.feature'), outdent`
+    Feature: Account
+      Scenario: Transfer
+        Given acount
+  `);
   const normal = run(dir, 'sample.feature');
   assert.notStrictEqual(normal.status, 0);
   assert.match(normal.stderr, /sample\.feature:3:11:.*acount/);

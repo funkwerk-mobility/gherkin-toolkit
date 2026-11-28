@@ -1,11 +1,15 @@
 import { test, assert } from 'vitest';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { workspace, run } from './fixtures.mjs';
+import { workspace, run, outdent } from './fixtures.mjs';
 
 test('JSON diagnostics contain locations, descriptive rules and severity', () => {
   const dir = workspace();
-  writeFileSync(join(dir, 'sample.feature'), 'Feature: Account\n  Scenario: Transfer\n    Given an acount\n');
+  writeFileSync(join(dir, 'sample.feature'), outdent`
+    Feature: Account
+      Scenario: Transfer
+        Given an acount
+  `);
   const result = run(dir, '--json', 'sample.feature');
   assert.notStrictEqual(result.status, 0);
   assert.strictEqual(result.stderr, '');
@@ -29,7 +33,10 @@ test('JSON forbidden-word diagnostics expose the forbidden word', () => {
 
 test('reports parse errors and continues checking other files in JSON', () => {
   const dir = workspace();
-  writeFileSync(join(dir, 'bad.feature'), '# language: unknown\nFeature: Bad\n');
+  writeFileSync(join(dir, 'bad.feature'), outdent`
+    # language: unknown
+    Feature: Bad
+  `);
   writeFileSync(join(dir, 'spelling.feature'), 'Feature: acount\n');
   const result = run(dir, '--json', 'bad.feature', 'spelling.feature');
   assert.notStrictEqual(result.status, 0);
@@ -52,8 +59,14 @@ test('JSON remains parseable when fixes and verbose output are enabled', () => {
 
 test('limits displayed diagnostics while counting hidden findings', () => {
   const dir = workspace();
-  writeFileSync(join(dir, 'cuke.yml'), 'diagnostics:\n  limit: 1\n');
-  writeFileSync(join(dir, 'sample.feature'), 'Feature: florple\n  Scenario: quabble\n');
+  writeFileSync(join(dir, 'cuke.yml'), outdent`
+    diagnostics:
+      limit: 1
+  `);
+  writeFileSync(join(dir, 'sample.feature'), outdent`
+    Feature: florple
+      Scenario: quabble
+  `);
   const result = run(dir, '--config', 'cuke.yml', 'sample.feature');
   assert.notStrictEqual(result.status, 0);
   assert.match(result.stderr, /florple/);
@@ -69,7 +82,10 @@ test('limits displayed diagnostics while counting hidden findings', () => {
 
 test('reports configuration errors as JSON when JSON output was selected', () => {
   const dir = workspace();
-  writeFileSync(join(dir, 'cuke.yml'), 'diagnostics:\n  limit: -1\n');
+  writeFileSync(join(dir, 'cuke.yml'), outdent`
+    diagnostics:
+      limit: -1
+  `);
   const result = run(dir, '--json', '--config', 'cuke.yml');
   assert.notStrictEqual(result.status, 0);
   assert.strictEqual(result.stderr, '');
@@ -88,7 +104,10 @@ test('reports argument errors as JSON even when the format option follows them',
 
 test('reports an invalid spelling tag once in a fix run', () => {
   const dir = workspace();
-  writeFileSync(join(dir, 'sample.feature'), '@spellchecker-ignore=invalid\nFeature: Account\n');
+  writeFileSync(join(dir, 'sample.feature'), outdent`
+    @spellchecker-ignore=invalid
+    Feature: Account
+  `);
   const result = run(dir, '--json', '--fix', 'sample.feature');
   assert.notStrictEqual(result.status, 0);
   const report = JSON.parse(result.stdout);

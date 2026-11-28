@@ -1,12 +1,16 @@
 import { test, assert } from 'vitest';
 import { writeFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
-import { workspace, run } from './fixtures.mjs';
+import { workspace, run, outdent } from './fixtures.mjs';
 
 test('check accepts a valid feature silently', () => {
   const dir = workspace();
   const file = join(dir, 'valid.feature');
-  writeFileSync(file, 'Feature: A valid feature\n  Scenario: A scenario\n    Given a step\n');
+  writeFileSync(file, outdent`
+    Feature: A valid feature
+      Scenario: A scenario
+        Given a step
+  `);
   const result = run(dir, file);
   assert.strictEqual(result.status, 0);
   assert.strictEqual(result.stdout, '');
@@ -19,8 +23,20 @@ test('check discovers nested features once and reports all parse errors', () => 
   mkdirSync(nested);
   const first = join(dir, 'first.feature');
   const second = join(nested, 'second.feature');
-  writeFileSync(first, 'Feature: Bad\n  Scenario: Bad\n    Given one\n      | a | b |\n      | x |\n');
-  writeFileSync(second, 'Feature: Bad\n  Scenario: Bad\n    Given one\n      | a | b |\n      | x |\n');
+  writeFileSync(first, outdent`
+    Feature: Bad
+      Scenario: Bad
+        Given one
+          | a | b |
+          | x |
+  `);
+  writeFileSync(second, outdent`
+    Feature: Bad
+      Scenario: Bad
+        Given one
+          | a | b |
+          | x |
+  `);
   writeFileSync(join(nested, 'ignored.txt'), 'not a feature');
   const result = run(dir, dir, first);
   assert.notStrictEqual(result.status, 0);
@@ -41,7 +57,10 @@ test('missing inputs fail without preventing other files from being checked', ()
   const dir = workspace();
   const bad = join(dir, 'bad.feature');
   const missing = join(dir, 'missing.feature');
-  writeFileSync(bad, '# language: unknown\nFeature: Bad\n');
+  writeFileSync(bad, outdent`
+    # language: unknown
+    Feature: Bad
+  `);
   const result = run(dir, missing, bad);
   assert.notStrictEqual(result.status, 0);
   assert.ok(result.stderr.includes(missing));
@@ -50,16 +69,26 @@ test('missing inputs fail without preventing other files from being checked', ()
 
 test('verbose output shows each check when it starts and avoids duplicate files', () => {
   const dir = workspace();
-  writeFileSync(join(dir, 'valid.feature'), 'Feature: Account\n  Scenario: Transfer\n    Given an account\n');
+  writeFileSync(join(dir, 'valid.feature'), outdent`
+    Feature: Account
+      Scenario: Transfer
+        Given an account
+  `);
   const result = run(dir, '--verbose', '--only', 'spell', '.', 'valid.feature');
   assert.strictEqual(result.status, 0, result.stderr);
-  assert.strictEqual(result.stdout, 'Parsing: valid.feature\nChecking spelling: valid.feature\n');
+  assert.strictEqual(result.stdout, outdent`
+    Parsing: valid.feature
+    Checking spelling: valid.feature
+  `);
   assert.strictEqual(result.stderr, '');
 });
 
 test('verbose reports parsing but not spelling if parsing fails', () => {
   const dir = workspace();
-  writeFileSync(join(dir, 'bad.feature'), '# language: unknown\nFeature: Bad\n');
+  writeFileSync(join(dir, 'bad.feature'), outdent`
+    # language: unknown
+    Feature: Bad
+  `);
   const result = run(dir, '--verbose', '--only', 'spell', 'bad.feature');
   assert.notStrictEqual(result.status, 0);
   assert.strictEqual(result.stdout, 'Parsing: bad.feature\n');

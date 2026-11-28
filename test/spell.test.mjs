@@ -1,12 +1,17 @@
 import { test, assert } from 'vitest';
 import { writeFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
-import { workspace, run } from './fixtures.mjs';
+import { workspace, run, outdent } from './fixtures.mjs';
 
 
 test('reports spelling mistakes in prose and steps with precise locations', () => {
   const dir = workspace();
-  writeFileSync(join(dir, 'sample.feature'), 'Feature: Account\n  An acount holds funds.\n  Scenario: Transfer\n    Given the acount is open\n');
+  writeFileSync(join(dir, 'sample.feature'), outdent`
+    Feature: Account
+      An acount holds funds.
+      Scenario: Transfer
+        Given the acount is open
+  `);
   const result = run(dir, '--only', 'spell', 'sample.feature');
   assert.notStrictEqual(result.status, 0);
   assert.match(result.stderr, /sample\.feature:2:6:.*acount/);
@@ -16,9 +21,16 @@ test('reports spelling mistakes in prose and steps with precise locations', () =
 test('a custom dictionary selected on the command line accepts its words', () => {
   const dir = workspace();
   mkdirSync(join(dir, 'dictionaries'));
-  writeFileSync(join(dir, 'dictionaries', 'en-US.dic'), '# Project words\nflorple\n');
+  writeFileSync(join(dir, 'dictionaries', 'en-US.dic'), outdent`
+    # Project words
+    florple
+  `);
   writeFileSync(join(dir, 'dictionaries', 'en-GB.dic'), 'acount\n');
-  writeFileSync(join(dir, 'sample.feature'), 'Feature: Account\n  Scenario: Transfer\n    Given florple and acount\n');
+  writeFileSync(join(dir, 'sample.feature'), outdent`
+    Feature: Account
+      Scenario: Transfer
+        Given florple and acount
+  `);
   const result = run(dir, '--only', 'spell', '--dictionary', 'dictionaries', 'sample.feature');
   assert.notStrictEqual(result.status, 0);
   assert.match(result.stderr, /acount/);
@@ -27,7 +39,13 @@ test('a custom dictionary selected on the command line accepts its words', () =>
 
 test('splits identifiers and numbers while treating contractions as whole words', () => {
   const dir = workspace();
-  writeFileSync(join(dir, 'sample.feature'), "Feature: Account\n  Scenario: Transfer\n    Given customerAccount has 123 orders and doesn't fail\n    And customerAcount doesn’t pass\n    And doesn fail\n");
+  writeFileSync(join(dir, 'sample.feature'), outdent`
+    Feature: Account
+      Scenario: Transfer
+        Given customerAccount has 123 orders and doesn't fail
+        And customerAcount doesn’t pass
+        And doesn fail
+  `);
   const result = run(dir, '--only', 'spell', 'sample.feature');
   assert.notStrictEqual(result.status, 0);
   assert.match(result.stderr, /sample\.feature:4:17:.*Acount/);
@@ -42,9 +60,16 @@ test('configuration dictionary paths follow their declaring file and CLI overrid
   mkdirSync(join(dir, 'other'));
   writeFileSync(join(dir, 'shared', 'en-US.dic'), 'florple\n');
   writeFileSync(join(dir, 'other', 'en-US.dic'), 'quabble\n');
-  writeFileSync(join(dir, 'shared', 'common.yml'), 'dictionary: .\nchecks: [spell]\n');
+  writeFileSync(join(dir, 'shared', 'common.yml'), outdent`
+    dictionary: .
+    checks: [spell]
+  `);
   writeFileSync(join(dir, 'project', 'cuke.yml'), 'extends: ../shared/common.yml\n');
-  writeFileSync(join(dir, 'sample.feature'), 'Feature: Account\n  Scenario: Transfer\n    Given florple\n');
+  writeFileSync(join(dir, 'sample.feature'), outdent`
+    Feature: Account
+      Scenario: Transfer
+        Given florple
+  `);
   const inherited = run(dir, '--config', 'project/cuke.yml', 'sample.feature');
   assert.strictEqual(inherited.status, 0, inherited.stderr);
   const overridden = run(dir, '--config', 'project/cuke.yml', '--dictionary', 'other', 'sample.feature');
@@ -54,7 +79,10 @@ test('configuration dictionary paths follow their declaring file and CLI overrid
 
 test('a feature in an unsupported language does not silently use English', () => {
   const dir = workspace();
-  writeFileSync(join(dir, 'fr.feature'), '# language: es\nCaracterística: Cuenta\n');
+  writeFileSync(join(dir, 'fr.feature'), outdent`
+    # language: es
+    Característica: Cuenta
+  `);
   const result = run(dir, '--only', 'spell', 'fr.feature');
   assert.notStrictEqual(result.status, 0);
   assert.match(result.stderr, /fr\.feature.*unsupported.*es/i);
@@ -62,7 +90,11 @@ test('a feature in an unsupported language does not silently use English', () =>
 
 test('rejects malformed contractions instead of accepting their fragments', () => {
   const dir = workspace();
-  writeFileSync(join(dir, 'sample.feature'), "Feature: Account\n  Scenario: Transfer\n    Given the user do'nt and does’n pass\n");
+  writeFileSync(join(dir, 'sample.feature'), outdent`
+    Feature: Account
+      Scenario: Transfer
+        Given the user do'nt and does’n pass
+  `);
   const result = run(dir, '--only', 'spell', 'sample.feature');
   assert.notStrictEqual(result.status, 0);
   assert.match(result.stderr, /sample\.feature:3:20:.*do'nt/);
@@ -71,7 +103,11 @@ test('rejects malformed contractions instead of accepting their fragments', () =
 
 test('reports descriptions after comments at the description line', () => {
   const dir = workspace();
-  writeFileSync(join(dir, 'sample.feature'), 'Feature: Account\n  # acount\n  acount\n');
+  writeFileSync(join(dir, 'sample.feature'), outdent`
+    Feature: Account
+      # acount
+      acount
+  `);
   const result = run(dir, '--only', 'spell', 'sample.feature');
   assert.notStrictEqual(result.status, 0);
   assert.match(result.stderr, /sample\.feature:3:3:.*acount/);
@@ -80,7 +116,15 @@ test('reports descriptions after comments at the description line', () => {
 
 test('checks Examples titles and descriptions', () => {
   const dir = workspace();
-  writeFileSync(join(dir, 'sample.feature'), 'Feature: Account\n  Scenario Outline: Transfer\n    Given a transfer\n    Examples: acount\n      An acount description\n      | amount |\n      | 1 |\n');
+  writeFileSync(join(dir, 'sample.feature'), outdent`
+    Feature: Account
+      Scenario Outline: Transfer
+        Given a transfer
+        Examples: acount
+          An acount description
+          | amount |
+          | 1 |
+  `);
   const result = run(dir, '--only', 'spell', 'sample.feature');
   assert.notStrictEqual(result.status, 0);
   assert.match(result.stderr, /sample\.feature:4:15:.*acount/);

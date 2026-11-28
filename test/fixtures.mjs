@@ -3,6 +3,9 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { onTestFinished } from 'vitest';
+import { outdent as createOutdent } from 'outdent';
+
+export const outdent = createOutdent({ trimTrailingNewline: false });
 
 const cli = resolve('dist/cli.js');
 

@@ -1,12 +1,18 @@
 import { test, assert } from 'vitest';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { workspace, run, runCommand } from './fixtures.mjs';
+import { workspace, run, runCommand, outdent } from './fixtures.mjs';
 
 test('format checks without writing and fixes indentation and aligned tables idempotently', () => {
   const dir = workspace();
   const file = join(dir, 'example.feature');
-  const original = 'Feature: Sample\nScenario: Example\nGiven a table\n|one|two|\n|longer|x|\n';
+  const original = outdent`
+    Feature: Sample
+    Scenario: Example
+    Given a table
+    |one|two|
+    |longer|x|
+  `;
   writeFileSync(file, original);
   const check = run(dir, '--only', 'format', 'example.feature');
   assert.notStrictEqual(check.status, 0);
@@ -15,7 +21,14 @@ test('format checks without writing and fixes indentation and aligned tables ide
   const fix = run(dir, '--only', 'format', '--fix', 'example.feature');
   assert.strictEqual(fix.status, 0, fix.stderr);
   assert.match(fix.stdout, /example\.feature/);
-  assert.strictEqual(readFileSync(file, 'utf8'), 'Feature: Sample\n\n  Scenario: Example\n    Given a table\n      | one    | two |\n      | longer | x   |\n');
+  assert.strictEqual(readFileSync(file, 'utf8'), outdent`
+    Feature: Sample
+
+      Scenario: Example
+        Given a table
+          | one    | two |
+          | longer | x   |
+  `);
   const again = run(dir, '--only', 'format', '--fix', 'example.feature');
   assert.strictEqual(again.status, 0, again.stderr);
   assert.strictEqual(again.stdout, '');
@@ -23,26 +36,64 @@ test('format checks without writing and fixes indentation and aligned tables ide
 
 test('tag layouts preserve inline explanations and can put each tag on its own line', () => {
   const dir = workspace();
-  writeFileSync(join(dir, 'cuke.yml'), 'checks: [format]\nformat:\n  tags: one-per-line\n');
-  writeFileSync(join(dir, 'example.feature'), '@one @two # reason\nFeature: Example\n  @skip # because of a bug\n  @other\n  Scenario: Example\n    Given a step\n');
+  writeFileSync(join(dir, 'cuke.yml'), outdent`
+    checks: [format]
+    format:
+      tags: one-per-line
+  `);
+  writeFileSync(join(dir, 'example.feature'), outdent`
+    @one @two # reason
+    Feature: Example
+      @skip # because of a bug
+      @other
+      Scenario: Example
+        Given a step
+  `);
   const fixed = run(dir, '--config', 'cuke.yml', '--fix', 'example.feature');
   assert.strictEqual(fixed.status, 0, fixed.stderr);
-  assert.strictEqual(readFileSync(join(dir, 'example.feature'), 'utf8'), '@one\n@two # reason\nFeature: Example\n\n  @skip # because of a bug\n  @other\n  Scenario: Example\n    Given a step\n');
+  assert.strictEqual(readFileSync(join(dir, 'example.feature'), 'utf8'), outdent`
+    @one
+    @two # reason
+    Feature: Example
+
+      @skip # because of a bug
+      @other
+      Scenario: Example
+        Given a step
+  `);
   assert.strictEqual(run(dir, '--config', 'cuke.yml', 'example.feature').status, 0);
 });
 
 test('preserves tag line breaks and explanations by default', () => {
   const dir = workspace();
-  writeFileSync(join(dir, 'example.feature'), '@one @two\n@skip # reason\nFeature: Example\n');
+  writeFileSync(join(dir, 'example.feature'), outdent`
+    @one @two
+    @skip # reason
+    Feature: Example
+  `);
   const result = run(dir, '--only', 'format', '--fix', 'example.feature');
   assert.strictEqual(result.status, 0, result.stderr);
-  assert.strictEqual(readFileSync(join(dir, 'example.feature'), 'utf8'), '@one @two\n@skip # reason\nFeature: Example\n');
+  assert.strictEqual(readFileSync(join(dir, 'example.feature'), 'utf8'), outdent`
+    @one @two
+    @skip # reason
+    Feature: Example
+  `);
 });
 
 test('normalizes description blank lines and preserves inline table comments', () => {
   const dir = workspace();
   const file = join(dir, 'example.feature');
-  writeFileSync(file, 'Feature: Example\n  words\n\n\n  more\n  Scenario: Example\n    Given a table\n      | a | b | # explanation\n      | long | x |\n');
+  writeFileSync(file, outdent`
+    Feature: Example
+      words
+
+
+      more
+      Scenario: Example
+        Given a table
+          | a | b | # explanation
+          | long | x |
+  `);
   const result = run(dir, '--only', 'format', '--fix', 'example.feature');
   assert.strictEqual(result.status, 0, result.stderr);
   assert.match(readFileSync(file, 'utf8'), /words\n\n  more/);
@@ -52,16 +103,30 @@ test('normalizes description blank lines and preserves inline table comments', (
 test('preserves tag lines while normalizing spaces', () => {
   const dir = workspace();
   const file = join(dir, 'example.feature');
-  writeFileSync(file, '@one    @two # reason\nFeature: Example\n');
+  writeFileSync(file, outdent`
+    @one    @two # reason
+    Feature: Example
+  `);
   const result = run(dir, '--only', 'format', '--fix', 'example.feature');
   assert.strictEqual(result.status, 0, result.stderr);
-  assert.strictEqual(readFileSync(file, 'utf8'), '@one @two # reason\nFeature: Example\n');
+  assert.strictEqual(readFileSync(file, 'utf8'), outdent`
+    @one @two # reason
+    Feature: Example
+  `);
 });
 
 test('requires a blank line between the last step and Examples', () => {
   const dir = workspace();
   const file = join(dir, 'outline.feature');
-  const source = 'Feature: Timetable\n\n  Scenario Outline: Show departures\n    Given a train <name>\n    Examples:\n      | name |\n      | ICE  |\n';
+  const source = outdent`
+    Feature: Timetable
+
+      Scenario Outline: Show departures
+        Given a train <name>
+        Examples:
+          | name |
+          | ICE  |
+  `;
   writeFileSync(file, source);
   const check = run(dir, '--only', 'format', 'outline.feature');
   assert.notStrictEqual(check.status, 0);
@@ -76,32 +141,75 @@ test('requires a blank line between the last step and Examples', () => {
 test('normalizes spacing after section keywords without changing title content', () => {
   const dir = workspace();
   const file = join(dir, 'outline.feature');
-  const source = 'Feature:  Timetable\n\n  Scenario:  Show the "red  signal"\n    Given a train\n';
+  const source = outdent`
+    Feature:  Timetable
+
+      Scenario:  Show the "red  signal"
+        Given a train
+  `;
   writeFileSync(file, source);
   const check = run(dir, '--only', 'format', 'outline.feature');
   assert.notStrictEqual(check.status, 0);
   assert.strictEqual(readFileSync(file, 'utf8'), source);
   const fixed = run(dir, '--only', 'format', '--fix', 'outline.feature');
   assert.strictEqual(fixed.status, 0, fixed.stderr);
-  assert.strictEqual(readFileSync(file, 'utf8'), 'Feature: Timetable\n\n  Scenario: Show the "red  signal"\n    Given a train\n');
+  assert.strictEqual(readFileSync(file, 'utf8'), outdent`
+    Feature: Timetable
+
+      Scenario: Show the "red  signal"
+        Given a train
+  `);
   assert.strictEqual(run(dir, '--only', 'format', 'outline.feature').status, 0);
 });
 
 test('normalizes spacing and wraps prose and tags with configurable indentation', () => {
   const dir = workspace();
   const file = join(dir, 'sample.feature');
-  writeFileSync(join(dir, 'cuke.yml'), 'checks: [format]\nformat:\n  printWidth: 30\n  tabWidth: 4\n  useTabs: false\n  tags: single-line\n');
-  writeFileSync(file, 'Feature: Example\n  This  is a long description with many words to wrap.\n\n\n  @first @second @third @fourth\n  Scenario: Example\n    Given   a train\n');
+  writeFileSync(join(dir, 'cuke.yml'), outdent`
+    checks: [format]
+    format:
+      printWidth: 30
+      tabWidth: 4
+      useTabs: false
+      tags: single-line
+  `);
+  writeFileSync(file, outdent`
+    Feature: Example
+      This  is a long description with many words to wrap.
+
+
+      @first @second @third @fourth
+      Scenario: Example
+        Given   a train
+  `);
   const fix = run(dir, '--config', 'cuke.yml', '--fix', 'sample.feature');
   assert.strictEqual(fix.status, 0, fix.stderr);
-  assert.strictEqual(readFileSync(file, 'utf8'), 'Feature: Example\n    This is a long description\n    with many words to wrap.\n\n    @first @second @third\n    @fourth\n    Scenario: Example\n        Given a train\n');
+  assert.strictEqual(readFileSync(file, 'utf8'), outdent`
+    Feature: Example
+        This is a long description
+        with many words to wrap.
+
+        @first @second @third
+        @fourth
+        Scenario: Example
+            Given a train
+  `);
   assert.strictEqual(run(dir, '--config', 'cuke.yml', 'sample.feature').status, 0);
 });
 
 test('supports tabs for indentation', () => {
   const dir = workspace();
-  writeFileSync(join(dir, 'cuke.yml'), 'checks: [format]\nformat:\n  tabWidth: 4\n  useTabs: true\n');
-  writeFileSync(join(dir, 'sample.feature'), 'Feature: Example\n  Scenario: Example\n    Given a train\n');
+  writeFileSync(join(dir, 'cuke.yml'), outdent`
+    checks: [format]
+    format:
+      tabWidth: 4
+      useTabs: true
+  `);
+  writeFileSync(join(dir, 'sample.feature'), outdent`
+    Feature: Example
+      Scenario: Example
+        Given a train
+  `);
   const fix = run(dir, '--config', 'cuke.yml', '--fix', 'sample.feature');
   assert.strictEqual(fix.status, 0, fix.stderr);
   assert.strictEqual(readFileSync(join(dir, 'sample.feature'), 'utf8'), 'Feature: Example\n\n\tScenario: Example\n\t\tGiven a train\n');
@@ -110,17 +218,46 @@ test('supports tabs for indentation', () => {
 test('preserves spacing inside quoted step arguments and docstrings', () => {
   const dir = workspace();
   const file = join(dir, 'quotes.feature');
-  writeFileSync(file, 'Feature: Example\n\n  Scenario: Example\n    Given   "a  b" and \'c  d\'\n      """\n      keep  this\n      """\n');
+  writeFileSync(file, outdent`
+    Feature: Example
+
+      Scenario: Example
+        Given   "a  b" and 'c  d'
+          """
+          keep  this
+          """
+  `);
   const fix = run(dir, '--only', 'format', '--fix', 'quotes.feature');
   assert.strictEqual(fix.status, 0, fix.stderr);
-  assert.strictEqual(readFileSync(file, 'utf8'), 'Feature: Example\n\n  Scenario: Example\n    Given "a  b" and \'c  d\'\n      """\n      keep  this\n      """\n');
+  assert.strictEqual(readFileSync(file, 'utf8'), outdent`
+    Feature: Example
+
+      Scenario: Example
+        Given "a  b" and 'c  d'
+          """
+          keep  this
+          """
+  `);
 });
 
 test('formats multiline quoted prose when changing indentation to tabs', () => {
   const dir = workspace();
-  writeFileSync(join(dir, 'cuke.yml'), 'checks: [format]\nformat:\n  useTabs: true\n');
+  writeFileSync(join(dir, 'cuke.yml'), outdent`
+    checks: [format]
+    format:
+      useTabs: true
+  `);
   const file = join(dir, 'sample.feature');
-  const source = 'Feature: Display\n\n  Scenario: Show a remark\n\n    It shows "via\n    Budapest" on the display.\n\n    Given a train\n';
+  const source = outdent`
+    Feature: Display
+
+      Scenario: Show a remark
+
+        It shows "via
+        Budapest" on the display.
+
+        Given a train
+  `;
   writeFileSync(file, source);
   const fix = run(dir, '--config', 'cuke.yml', '--fix', 'sample.feature');
   assert.strictEqual(fix.status, 0, fix.stderr);
@@ -131,7 +268,15 @@ test('formats multiline quoted prose when changing indentation to tabs', () => {
 test('keeps punctuation attached to quoted prose while wrapping', () => {
   const dir = workspace();
   const file = join(dir, 'example.feature');
-  const source = 'Feature: Example\n\n  Scenario: Example\n\n    The feature "Route band". See ("Cancellation").\n\n    Given a train\n';
+  const source = outdent`
+    Feature: Example
+
+      Scenario: Example
+
+        The feature "Route band". See ("Cancellation").
+
+        Given a train
+  `;
   writeFileSync(file, source);
   const fixed = run(dir, '--only', 'format', '--fix', 'example.feature');
   assert.strictEqual(fixed.status, 0, fixed.stderr);
@@ -141,8 +286,20 @@ test('keeps punctuation attached to quoted prose while wrapping', () => {
 test('format command fixes files using Prettier settings when no Cuke configuration is selected', () => {
   const dir = workspace();
   const file = join(dir, 'example.feature');
-  writeFileSync(join(dir, '.prettierrc.yml'), 'printWidth: 30\ntabWidth: 4\nuseTabs: true\nsemi: true\n');
-  writeFileSync(file, '@one @two\n@three # reason\nFeature: Example\n  A description that is long enough to wrap.\n  Scenario: Example\n    Given a train\n');
+  writeFileSync(join(dir, '.prettierrc.yml'), outdent`
+    printWidth: 30
+    tabWidth: 4
+    useTabs: true
+    semi: true
+  `);
+  writeFileSync(file, outdent`
+    @one @two
+    @three # reason
+    Feature: Example
+      A description that is long enough to wrap.
+      Scenario: Example
+        Given a train
+  `);
   const result = runCommand(dir, 'format', 'example.feature');
   assert.strictEqual(result.status, 0, result.stderr);
   const output = readFileSync(file, 'utf8');
@@ -154,9 +311,20 @@ test('format command fixes files using Prettier settings when no Cuke configurat
 
 test('explicit Cuke configuration takes precedence over Prettier settings', () => {
   const dir = workspace();
-  writeFileSync(join(dir, '.prettierrc.yml'), 'tabWidth: 8\nuseTabs: true\n');
-  writeFileSync(join(dir, 'cuke.yml'), 'checks: [spell]\nformat:\n  tabWidth: 4\n');
-  writeFileSync(join(dir, 'example.feature'), 'Feature: Example\nScenario: Example\nGiven a train\n');
+  writeFileSync(join(dir, '.prettierrc.yml'), outdent`
+    tabWidth: 8
+    useTabs: true
+  `);
+  writeFileSync(join(dir, 'cuke.yml'), outdent`
+    checks: [spell]
+    format:
+      tabWidth: 4
+  `);
+  writeFileSync(join(dir, 'example.feature'), outdent`
+    Feature: Example
+    Scenario: Example
+    Given a train
+  `);
   const result = runCommand(dir, 'format', '--config', 'cuke.yml', 'example.feature');
   assert.strictEqual(result.status, 0, result.stderr);
   assert.match(readFileSync(join(dir, 'example.feature'), 'utf8'), /\n    Scenario: Example\n        Given a train/);

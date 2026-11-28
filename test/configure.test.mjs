@@ -3,7 +3,7 @@ import { spawnSync } from 'node:child_process';
 import { mkdirSync, writeFileSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { parse } from 'yaml';
-import { workspace } from './fixtures.mjs';
+import { workspace, outdent } from './fixtures.mjs';
 
 const cli = resolve('dist/cli.js');
 const driver = resolve('test/terminal.py');
@@ -22,7 +22,12 @@ const down = '\u001b[B';
 
 test('skips spelling questions when spelling is deselected and remembers the configuration', () => {
   const dir = workspace();
-  writeFileSync(join(dir, 'cuke.yml'), '# Team settings\nchecks: [spell]\ndiagnostics:\n  limit: 17\n');
+  writeFileSync(join(dir, 'cuke.yml'), outdent`
+    # Team settings
+    checks: [spell]
+    diagnostics:
+      limit: 17
+  `);
   const result = wizard(dir, [['Configuration file', '\r'], ['Checks to run by default', ' \r'], ['Step data tables have a header row?', '\r']]);
   assert.strictEqual(result.status, 0, result.output);
   assert.match(result.output, /Saved and selected configuration: cuke\.yml/);
@@ -38,7 +43,12 @@ test('skips spelling questions when spelling is deselected and remembers the con
 test('offers all overrides together and checks selected table values in two languages', () => {
   const dir = workspace();
   mkdirSync(join(dir, 'dictionary'));
-  writeFileSync(join(dir, 'cuke.yml'), 'dictionary: dictionary\nspell:\n  docStrings:\n    locale: en-GB\n');
+  writeFileSync(join(dir, 'cuke.yml'), outdent`
+    dictionary: dictionary
+    spell:
+      docStrings:
+        locale: en-GB
+  `);
   const result = wizard(dir, [
     ['Checks to run by default', '\r'],
     ['Step data tables have a header row?', '\r'],
@@ -60,7 +70,12 @@ test('offers all overrides together and checks selected table values in two lang
   assert.match(plain, /> Docstrings/);
   assert.notMatch(plain, /> > Step data tables: languages/);
   assert.match(readFileSync(join(dir, 'cuke.yml'), 'utf8'), /locale: en-GB/);
-  writeFileSync(join(dir, 'sample.feature'), 'Feature: Account\n  Scenario: Transfer\n    Given a station\n      | Bahnsteig | florple |\n');
+  writeFileSync(join(dir, 'sample.feature'), outdent`
+    Feature: Account
+      Scenario: Transfer
+        Given a station
+          | Bahnsteig | florple |
+  `);
   const checked = cuke(dir, 'check', '--config', 'cuke.yml', '--fix', 'sample.feature');
   assert.strictEqual(checked.status, 0, checked.stderr);
   assert.match(readFileSync(join(dir, 'dictionary', 'en.dic'), 'utf8'), /florple/);
