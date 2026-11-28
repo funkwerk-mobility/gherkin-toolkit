@@ -1,4 +1,4 @@
-import { readFileSync, realpathSync } from 'node:fs';
+import { existsSync, readFileSync, realpathSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { parse } from 'yaml';
 import { mergeSpelling, parseSpelling, type SpellConfig } from './policies.js';
@@ -6,7 +6,7 @@ import { mergeSpelling, parseSpelling, type SpellConfig } from './policies.js';
 import type { TagLayout } from './format.js';
 
 export type Check = 'spell' | 'format';
-export type Configuration = { checks: Check[]; dictionary?: string; spell?: SpellConfig; diagnosticLimit?: number; stepTableHeader?: boolean; tagLayout?: TagLayout; lineLength?: number; indentation?: number; useTabs?: boolean };
+export type Configuration = { checks: Check[]; dictionary?: string; spell?: SpellConfig; diagnosticLimit?: number; stepTableHeader?: boolean; tagLayout?: TagLayout; printWidth?: number; tabWidth?: number; useTabs?: boolean };
 
 function checks(value: unknown, source: string): Check[] {
   if (!Array.isArray(value) || value.some(item => typeof item !== 'string')) {
@@ -51,9 +51,9 @@ export function resolveConfiguration(path: string | undefined, only: string[] | 
         const format = config.format;
         if (!format || typeof format !== 'object' || Array.isArray(format)) throw new Error(`${file}: format must be a mapping`);
         const value = format as Record<string, unknown>;
-        for (const key of Object.keys(value)) if (!['tags', 'lineLength', 'indentation', 'useTabs'].includes(key)) throw new Error(`${file}: unknown format setting: ${key}`);
+        for (const key of Object.keys(value)) if (!['tags', 'printWidth', 'tabWidth', 'useTabs'].includes(key)) throw new Error(`${file}: unknown format setting: ${key}`);
         if (value.tags !== undefined && !['preserve', 'one-per-line', 'single-line'].includes(String(value.tags))) throw new Error(`${file}: invalid format.tags`);
-        for (const key of ['lineLength', 'indentation']) if (value[key] !== undefined && (typeof value[key] !== 'number' || !Number.isSafeInteger(value[key]) || (value[key] as number) < 1)) throw new Error(`${file}: format.${key} must be a positive integer`);
+        for (const key of ['printWidth', 'tabWidth']) if (value[key] !== undefined && (typeof value[key] !== 'number' || !Number.isSafeInteger(value[key]) || (value[key] as number) < 1)) throw new Error(`${file}: format.${key} must be a positive integer`);
         if (value.useTabs !== undefined && typeof value.useTabs !== 'boolean') throw new Error(`${file}: format.useTabs must be a boolean`);
       }
       if (config.tables !== undefined) {
@@ -72,8 +72,8 @@ export function resolveConfiguration(path: string | undefined, only: string[] | 
         dictionary: config.dictionary === undefined ? inherited.dictionary : resolve(dirname(file), config.dictionary as string),
         spell: mergeSpelling(inherited.spell, config.spell === undefined ? undefined : parseSpelling(config.spell, file)),
         diagnosticLimit: (config.diagnostics as { limit?: number } | undefined)?.limit ?? inherited.diagnosticLimit,
-        lineLength: (config.format as { lineLength?: number } | undefined)?.lineLength ?? inherited.lineLength,
-        indentation: (config.format as { indentation?: number } | undefined)?.indentation ?? inherited.indentation,
+        printWidth: (config.format as { printWidth?: number } | undefined)?.printWidth ?? inherited.printWidth,
+        tabWidth: (config.format as { tabWidth?: number } | undefined)?.tabWidth ?? inherited.tabWidth,
         useTabs: (config.format as { useTabs?: boolean } | undefined)?.useTabs ?? inherited.useTabs,
         tagLayout: (config.format as { tags?: TagLayout } | undefined)?.tags ?? inherited.tagLayout,
         stepTableHeader: (config.tables as { stepHeader?: boolean } | undefined)?.stepHeader ?? inherited.stepTableHeader,
@@ -82,4 +82,22 @@ export function resolveConfiguration(path: string | undefined, only: string[] | 
   }
   const configured: Configuration = path === undefined ? { checks: ['spell'] } : load(resolve(path));
   return { ...configured, checks: only === undefined ? configured.checks : checks(only, '--only') };
+}
+
+/** Read the formatting settings shared with Prettier when no Cuke configuration is selected. */
+export function prettierFallback(): Pick<Configuration, 'printWidth' | 'tabWidth' | 'useTabs' | 'tagLayout'> {
+  const file = '.prettierrc.yml';
+  if (!existsSync(file)) return {};
+  let value: unknown;
+  try { value = parse(readFileSync(file, 'utf8'), { uniqueKeys: true }); }
+  catch (error) { throw new Error(`${file}: ${error instanceof Error ? error.message : String(error)}`); }
+  if (value === null) return {};
+  if (typeof value !== 'object' || Array.isArray(value)) throw new Error(`${file}: configuration must be a mapping`);
+  const settings = value as Record<string, unknown>;
+  for (const key of ['printWidth', 'tabWidth']) {
+    const setting = settings[key];
+    if (setting !== undefined && (typeof setting !== 'number' || !Number.isSafeInteger(setting) || setting < 1)) throw new Error(`${file}: ${key} must be a positive integer`);
+  }
+  if (settings.useTabs !== undefined && typeof settings.useTabs !== 'boolean') throw new Error(`${file}: useTabs must be a boolean`);
+  return { printWidth: settings.printWidth as number | undefined, tabWidth: settings.tabWidth as number | undefined, useTabs: settings.useTabs as boolean | undefined, tagLayout: 'preserve' };
 }

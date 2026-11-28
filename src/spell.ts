@@ -9,10 +9,15 @@ import type { Reporter } from './diagnostics.js';
 
 const require = createRequire(import.meta.url);
 
-let luxembourgish: Promise<import('nspell')> | undefined;
-function loadLuxembourgish(): Promise<import('nspell')> {
-  return luxembourgish ??= Promise.all([import('nspell'), import('dictionary-lb')]).then(([nspell, dictionary]) =>
-    nspell.default(Buffer.from(dictionary.default.aff), Buffer.from(dictionary.default.dic)));
+const hunspellDictionaries = new Map<string, Promise<import('nspell')>>();
+function loadHunspell(packageName: string): Promise<import('nspell')> {
+  let result = hunspellDictionaries.get(packageName);
+  if (!result) {
+    result = Promise.all([import('nspell'), import(packageName)]).then(([nspell, dictionary]) =>
+      nspell.default(Buffer.from(dictionary.default.aff), Buffer.from(dictionary.default.dic)));
+    hunspellDictionaries.set(packageName, result);
+  }
+  return result;
 }
 
 type Exclusion = 'tables' | 'examples' | 'docStrings';
@@ -203,7 +208,7 @@ export async function checkSpelling(feature: Feature | undefined, source: string
     const key = JSON.stringify(selectedLocales);
     let entry = cache.get(key);
     if (!entry) {
-      const definitions = selectedLocales.filter(locale => locale !== 'lb-LU').map(locale => {
+      const definitions = selectedLocales.filter(locale => !locales[locale].hunspell).map(locale => {
         const info = locales[locale];
         return { name: locale, path: join(dirname(require.resolve(info.package)), info.file) };
       });
@@ -220,13 +225,14 @@ export async function checkSpelling(feature: Feature | undefined, source: string
       } else {
         if (dictionaryDir && selectedLocales.includes(defaultLocale)) words.push(...readWords(dictionaryDir));
       }
-      const settings = { dictionaryDefinitions: definitions, dictionaries: selectedLocales.filter(locale => locale !== 'lb-LU'), minWordLength: 2, words: words.filter(word => !word.startsWith('!')), flagWords: words.filter(word => word.startsWith('!')).map(word => word.slice(1)) };
+      const settings = { dictionaryDefinitions: definitions, dictionaries: selectedLocales.filter(locale => !locales[locale].hunspell), minWordLength: 2, words: words.filter(word => !word.startsWith('!')), flagWords: words.filter(word => word.startsWith('!')).map(word => word.slice(1)) };
       entry = { settings, dictionary: await getDictionary(settings) };
       cache.set(key, entry);
     }
     const normalized = value.replace(/’/gu, "'");
-    const lux = selectedLocales.includes('lb-LU') ? await loadLuxembourgish() : undefined;
-    const invalid = [...normalized.matchAll(/[\p{L}\p{M}]+(?:'[\p{L}\p{M}]+)+/gu)].filter(match => !entry!.dictionary.has(match[0]) && !lux?.correct(match[0]));
+    const hunspell = await Promise.all(selectedLocales.filter(locale => locales[locale].hunspell).map(locale => loadHunspell(locales[locale].package)));
+    const acceptedByHunspell = (word: string) => hunspell.some(dictionary => dictionary.correct(word));
+    const invalid = [...normalized.matchAll(/[\p{L}\p{M}]+(?:'[\p{L}\p{M}]+)+/gu)].filter(match => !entry!.dictionary.has(match[0]) && !acceptedByHunspell(match[0]));
     function diagnostic(offset: number, word: string, forbidden = false) {
       const location = `${file}:${line}:${column + (positions?.[offset] ?? offset)}`;
       if (fixes && forbidden) return;
@@ -242,7 +248,7 @@ export async function checkSpelling(feature: Feature | undefined, source: string
     for (const match of invalid) diagnostic(match.index, value.slice(match.index, match.index + match[0].length), issues.some(issue => issue.isFlagged && issue.offset >= match.index && issue.offset < match.index + match[0].length));
     for (const issue of issues) {
       if (invalid.some(match => issue.offset >= match.index && issue.offset < match.index + match[0].length)) continue;
-      if (!issue.isFlagged && lux?.correct(issue.text)) continue;
+      if (!issue.isFlagged && acceptedByHunspell(issue.text)) continue;
       diagnostic(issue.offset, value.slice(issue.offset, issue.offset + issue.text.length), issue.isFlagged);
     }
   }

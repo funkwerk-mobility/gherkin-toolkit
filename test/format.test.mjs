@@ -1,7 +1,7 @@
 import { test, assert } from 'vitest';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { workspace, run } from './fixtures.mjs';
+import { workspace, run, runCommand } from './fixtures.mjs';
 
 test('format checks without writing and fixes indentation and aligned tables idempotently', () => {
   const dir = workspace();
@@ -90,7 +90,7 @@ test('normalizes spacing after section keywords without changing title content',
 test('normalizes spacing and wraps prose and tags with configurable indentation', () => {
   const dir = workspace();
   const file = join(dir, 'sample.feature');
-  writeFileSync(join(dir, 'cuke.yml'), 'checks: [format]\nformat:\n  lineLength: 30\n  indentation: 4\n  useTabs: false\n  tags: single-line\n');
+  writeFileSync(join(dir, 'cuke.yml'), 'checks: [format]\nformat:\n  printWidth: 30\n  tabWidth: 4\n  useTabs: false\n  tags: single-line\n');
   writeFileSync(file, 'Feature: Example\n  This  is a long description with many words to wrap.\n\n\n  @first @second @third @fourth\n  Scenario: Example\n    Given   a train\n');
   const fix = run(dir, '--config', 'cuke.yml', '--fix', 'sample.feature');
   assert.strictEqual(fix.status, 0, fix.stderr);
@@ -100,7 +100,7 @@ test('normalizes spacing and wraps prose and tags with configurable indentation'
 
 test('supports tabs for indentation', () => {
   const dir = workspace();
-  writeFileSync(join(dir, 'cuke.yml'), 'checks: [format]\nformat:\n  indentation: 4\n  useTabs: true\n');
+  writeFileSync(join(dir, 'cuke.yml'), 'checks: [format]\nformat:\n  tabWidth: 4\n  useTabs: true\n');
   writeFileSync(join(dir, 'sample.feature'), 'Feature: Example\n  Scenario: Example\n    Given a train\n');
   const fix = run(dir, '--config', 'cuke.yml', '--fix', 'sample.feature');
   assert.strictEqual(fix.status, 0, fix.stderr);
@@ -136,4 +136,37 @@ test('keeps punctuation attached to quoted prose while wrapping', () => {
   const fixed = run(dir, '--only', 'format', '--fix', 'example.feature');
   assert.strictEqual(fixed.status, 0, fixed.stderr);
   assert.strictEqual(readFileSync(file, 'utf8'), source);
+});
+
+test('format command fixes files using Prettier settings when no Cuke configuration is selected', () => {
+  const dir = workspace();
+  const file = join(dir, 'example.feature');
+  writeFileSync(join(dir, '.prettierrc.yml'), 'printWidth: 30\ntabWidth: 4\nuseTabs: true\nsemi: true\n');
+  writeFileSync(file, '@one @two\n@three # reason\nFeature: Example\n  A description that is long enough to wrap.\n  Scenario: Example\n    Given a train\n');
+  const result = runCommand(dir, 'format', 'example.feature');
+  assert.strictEqual(result.status, 0, result.stderr);
+  const output = readFileSync(file, 'utf8');
+  assert.match(output, /^@one @two\n@three # reason/m);
+  assert.match(output, /\tScenario: Example\n\t\tGiven a train/);
+  assert.match(output, /description that is long\n\tenough to wrap/);
+  assert.strictEqual(runCommand(dir, 'format', 'example.feature').stdout, '');
+});
+
+test('explicit Cuke configuration takes precedence over Prettier settings', () => {
+  const dir = workspace();
+  writeFileSync(join(dir, '.prettierrc.yml'), 'tabWidth: 8\nuseTabs: true\n');
+  writeFileSync(join(dir, 'cuke.yml'), 'checks: [spell]\nformat:\n  tabWidth: 4\n');
+  writeFileSync(join(dir, 'example.feature'), 'Feature: Example\nScenario: Example\nGiven a train\n');
+  const result = runCommand(dir, 'format', '--config', 'cuke.yml', 'example.feature');
+  assert.strictEqual(result.status, 0, result.stderr);
+  assert.match(readFileSync(join(dir, 'example.feature'), 'utf8'), /\n    Scenario: Example\n        Given a train/);
+});
+
+test('format fallback also applies to check, and malformed Prettier settings are reported', () => {
+  const dir = workspace();
+  writeFileSync(join(dir, '.prettierrc.yml'), 'tabWidth: 0\n');
+  writeFileSync(join(dir, 'example.feature'), 'Feature: Example\n');
+  const result = run(dir, '--only', 'format', 'example.feature');
+  assert.notStrictEqual(result.status, 0);
+  assert.match(result.stderr, /tabWidth must be a positive integer/);
 });

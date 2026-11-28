@@ -4,7 +4,7 @@ import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import * as p from '@clack/prompts';
 import { isMap, parseDocument, type Node } from 'yaml';
 import { resolveConfiguration } from './config.js';
-import { configuredLocale, spellingLocale, type Region } from './policies.js';
+import { configuredLocale, locales, spellingLocale, type Region } from './policies.js';
 
 function selectionFile(): string {
   const xdg = process.env.XDG_CONFIG_HOME;
@@ -32,6 +32,9 @@ const languages = [
   { value: 'nb-NO', label: 'Norwegian Bokmål' },
   { value: 'lb-LU', label: 'Luxembourgish' },
 ];
+for (const locale of Object.keys(locales)) {
+  if (!languages.some(language => language.value === locale)) languages.push({ value: locale, label: new Intl.DisplayNames(['en'], { type: 'language' }).of(locale) ?? locale });
+}
 const regions: { value: Region; label: string; name: string }[] = [
   { value: 'prose', label: 'Prose', name: 'Prose' }, { value: 'content', label: 'Content', name: 'Content' },
   { value: 'quotes', label: '> Quoted content', name: 'Quoted content' }, { value: 'tables', label: '> All tables', name: 'All tables' },
@@ -82,10 +85,10 @@ export async function configure(args: string[]): Promise<void> {
     ], initialValue: current.tagLayout ?? 'preserve' }));
     if (tags !== (current.tagLayout ?? 'preserve')) { document.setIn(['format', 'tags'], tags); changed = true; }
     const positive = (value: string | undefined) => value && /^[1-9]\d*$/u.test(value) && Number.isSafeInteger(Number(value)) ? undefined : 'Enter a positive integer.';
-    const width = Number(answer(await p.text({ message: 'Line width', initialValue: String(current.lineLength ?? 120), validate: positive })));
-    if (width !== (current.lineLength ?? 120)) { document.setIn(['format', 'lineLength'], width); changed = true; }
-    const indent = Number(answer(await p.text({ message: 'Indentation width', initialValue: String(current.indentation ?? 2), validate: positive })));
-    if (indent !== (current.indentation ?? 2)) { document.setIn(['format', 'indentation'], indent); changed = true; }
+    const width = Number(answer(await p.text({ message: 'Line width', initialValue: String(current.printWidth ?? 120), validate: positive })));
+    if (width !== (current.printWidth ?? 120)) { document.setIn(['format', 'printWidth'], width); changed = true; }
+    const indent = Number(answer(await p.text({ message: 'Indentation width', initialValue: String(current.tabWidth ?? 2), validate: positive })));
+    if (indent !== (current.tabWidth ?? 2)) { document.setIn(['format', 'tabWidth'], indent); changed = true; }
     const useTabs = answer(await p.confirm({ message: 'Use tabs for indentation?', initialValue: current.useTabs ?? false }));
     if (useTabs !== (current.useTabs ?? false)) { document.setIn(['format', 'useTabs'], useTabs); changed = true; }
   }

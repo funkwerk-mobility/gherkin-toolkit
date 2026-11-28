@@ -10,9 +10,9 @@ type Node = { location: { line: number }; description?: string; tags?: Node[]; c
 
 type Entry = { indent: number; header?: boolean; section?: boolean; tag?: boolean; table?: number; doc?: boolean };
 
-export function formatFeature(source: string, document: GherkinDocument, layout: TagLayout, options: { lineLength: number; indentation: number; useTabs: boolean } = { lineLength: 120, indentation: 2, useTabs: false }): string {
-  const indent = (level: number) => (options.useTabs ? '\t' : ' '.repeat(options.indentation)).repeat(level);
-  const displayWidth = (line: string) => [...line].reduce((width, char) => char === '\t' ? width + options.indentation - width % options.indentation : width + 1, 0);
+export function formatFeature(source: string, document: GherkinDocument, layout: TagLayout, options: { printWidth: number; tabWidth: number; useTabs: boolean } = { printWidth: 120, tabWidth: 2, useTabs: false }): string {
+  const indent = (level: number) => (options.useTabs ? '\t' : ' '.repeat(options.tabWidth)).repeat(level);
+  const displayWidth = (line: string) => [...line].reduce((width, char) => char === '\t' ? width + options.tabWidth - width % options.tabWidth : width + 1, 0);
   function spaces(value: string): string {
     let quote = ''; let escaped = false; let result = '';
     for (const char of value) {
@@ -132,7 +132,7 @@ export function formatFeature(source: string, document: GherkinDocument, layout:
         let line = prefix;
         for (const word of words(spaces(raw.trim()))) {
           const next = line === prefix ? prefix + word : line + ' ' + word;
-          if (line !== prefix && displayWidth(next) > options.lineLength) { result.push(line); line = prefix + word; } else line = next;
+          if (line !== prefix && displayWidth(next) > options.printWidth) { result.push(line); line = prefix + word; } else line = next;
         }
         result.push(line);
       } else result.push(raw);
@@ -164,7 +164,7 @@ export function formatFeature(source: string, document: GherkinDocument, layout:
         if (layout === 'single-line' && result.length && result.at(-1)!.trimStart().startsWith('@') && !result.at(-1)!.includes('#')) current = result.pop()!;
         for (const name of names) {
           const next = current ? current + ' ' + name : indent(currentIndent) + name;
-          if (current && displayWidth(next) > options.lineLength) { result.push(current); current = indent(currentIndent) + name; }
+          if (current && displayWidth(next) > options.printWidth) { result.push(current); current = indent(currentIndent) + name; }
           else current = next;
         }
         result.push(current + suffix);

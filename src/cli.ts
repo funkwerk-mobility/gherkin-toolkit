@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { AstBuilder, Errors, GherkinClassicTokenMatcher, Parser } from '@cucumber/gherkin';
 import { IdGenerator } from '@cucumber/messages';
 import type { Feature } from '@cucumber/messages';
-import { resolveConfiguration, type Check } from './config.js';
+import { prettierFallback, resolveConfiguration, type Check } from './config.js';
 import type { SpellConfig } from './policies.js';
 import { Reporter, type OutputFormat } from './diagnostics.js';
 import { formatFeature, UnsafeFormattingError, type TagLayout } from './format.js';
@@ -41,7 +41,7 @@ function formattingDifference(source: string, formatted: string): { line: number
   return { line: index + 1, column: column + 1, message: 'Formatting differs here' };
 }
 
-async function check(inputs: string[], checks: Check[], dictionary: string | undefined, verbose: boolean, fix: boolean, reporter: Reporter, policies?: SpellConfig, stepTableHeader = false, tagLayout: TagLayout = 'preserve', lineLength = 120, indentation = 2, useTabs = false): Promise<void> {
+async function check(inputs: string[], checks: Check[], dictionary: string | undefined, verbose: boolean, fix: boolean, reporter: Reporter, policies?: SpellConfig, stepTableHeader = false, tagLayout: TagLayout = 'preserve', printWidth = 120, tabWidth = 2, useTabs = false): Promise<void> {
   let spelling: typeof import('./spell.js') | undefined;
   let fixes: import('./spell.js').SpellingFixes | undefined;
   const checked: { feature?: Feature; source: string; path: string }[] = [];
@@ -63,7 +63,7 @@ async function check(inputs: string[], checks: Check[], dictionary: string | und
         let document = parser.parse(source);
         if (checks.includes('format')) {
           if (verbose) reporter.progress(`Checking formatting: ${path}`);
-          const formatted = formatFeature(source, document, tagLayout, { lineLength, indentation, useTabs });
+          const formatted = formatFeature(source, document, tagLayout, { printWidth, tabWidth, useTabs });
           if (formatted !== source) {
             if (fix) { writeFileSync(path, formatted); reporter.fixed(`Formatted: ${path}`); source = formatted; document = parser.parse(source); }
             else reporter.report({ path, ...formattingDifference(source, formatted), rule: 'format', severity: 'error' });
@@ -91,6 +91,7 @@ const usage = `Usage: cuke check [options] [files or directories...]
 
 Commands:
   check                 Check feature files
+  format                Format feature files in place
   configure             Configure cuke interactively
 
 Options:
@@ -106,9 +107,10 @@ Options:
 if (process.argv[2] === 'configure') {
   try { await configure(process.argv.slice(3)); }
   catch (error) { console.error(error instanceof Error ? error.message : String(error)); process.exitCode = 1; }
-} else if (process.argv[2] === 'check' && process.argv.length === 4 && process.argv[3] === '--help') {
+} else if (['check', 'format'].includes(process.argv[2]) && process.argv.length === 4 && process.argv[3] === '--help') {
   console.log(usage);
-} else if (process.argv[2] === 'check') {
+} else if (process.argv[2] === 'check' || process.argv[2] === 'format') {
+  const formatting = process.argv[2] === 'format';
   let format: OutputFormat = 'human';
   const errorFormat: OutputFormat = process.argv.slice(3).includes('--json') ? 'json' : 'human';
   try {
@@ -117,7 +119,7 @@ if (process.argv[2] === 'configure') {
     let only: string[] | undefined;
     let dictionary: string | undefined;
     let verbose = false;
-    let fix = false;
+    let fix = formatting;
     let limit: number | undefined;
     const args = process.argv.slice(3);
     for (let i = 0; i < args.length; i++) {
@@ -131,15 +133,18 @@ if (process.argv[2] === 'configure') {
         if (arg === '--limit') {
           if (!/^\d+$/u.test(value) || !Number.isSafeInteger(Number(value))) throw new Error('--limit must be a nonnegative integer');
           limit = Number(value);
-        } else if (arg === '--config') config = value;
+        } else if (arg === '--only' && formatting) throw new Error('--only cannot be used with format');
+        else if (arg === '--config') config = value;
         else if (arg === '--dictionary') dictionary = value;
         else only = [...(only ?? []), ...value.split(',')];
       } else if (arg.startsWith('-')) throw new Error(`Unknown option: ${arg}`);
       else inputs.push(arg);
     }
-    const selected = resolveConfiguration(config ?? rememberedConfiguration(), only);
+    const configPath = config ?? rememberedConfiguration();
+    const selected = resolveConfiguration(configPath, formatting ? ['format'] : only);
+    if (configPath === undefined && selected.checks.includes('format')) Object.assign(selected, prettierFallback());
     const reporter = new Reporter(format, limit ?? selected.diagnosticLimit ?? 100);
-    await check(inputs, selected.checks, dictionary ?? selected.dictionary, verbose, fix, reporter, selected.spell, selected.stepTableHeader, selected.tagLayout, selected.lineLength, selected.indentation, selected.useTabs);
+    await check(inputs, selected.checks, dictionary ?? selected.dictionary, verbose, fix, reporter, selected.spell, selected.stepTableHeader, selected.tagLayout, selected.printWidth, selected.tabWidth, selected.useTabs);
     reporter.finish();
   } catch (error) {
     const reporter = new Reporter(errorFormat, 100);

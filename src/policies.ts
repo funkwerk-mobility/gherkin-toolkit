@@ -1,11 +1,22 @@
-export const locales: Record<string, { package: string; file: string; short?: string }> = {
+import { readFileSync } from 'node:fs';
+
+export const locales: Record<string, { package: string; file: string; short?: string; hunspell?: boolean }> = {
   'en-US': { package: '@cspell/dict-en_us', file: 'en_US.trie.gz', short: 'en' },
   'en-GB': { package: '@cspell/dict-en-gb', file: 'en_GB.trie.gz' },
   'fr-FR': { package: '@cspell/dict-fr-fr', file: 'fr-fr.trie.gz', short: 'fr' },
   'nb-NO': { package: '@cspell/dict-nb-no', file: 'dict/nb-no.trie.gz', short: 'nb' },
-  'lb-LU': { package: 'dictionary-lb', file: '', short: 'lb' },
+  'lb-LU': { package: 'dictionary-lb', file: '', short: 'lb', hunspell: true },
   'de-DE': { package: '@cspell/dict-de-de', file: 'de_DE.trie.gz', short: 'de' },
 };
+// Discover compatible Hunspell packages declared as runtime dependencies.
+const manifest = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')) as { dependencies?: Record<string, string> };
+for (const name of Object.keys(manifest.dependencies ?? {})) {
+  const match = /^dictionary-([a-z]{2,3}(?:-[a-z]{2})?)$/u.exec(name);
+  if (!match || Object.values(locales).some(info => info.package === name)) continue;
+  const [language, region] = match[1].split('-');
+  const locale = region ? `${language}-${region.toUpperCase()}` : language;
+  if (!locales[locale]) locales[locale] = { package: name, file: '', short: language, hunspell: true };
+}
 const aliases: Record<string, string> = { en: 'en-US', de: 'de-DE', fr: 'fr-FR', no: 'nb-NO', nb: 'nb-NO', lb: 'lb-LU' };
 
 export function spellingLocale(value: string): string {
