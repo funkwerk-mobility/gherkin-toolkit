@@ -110,12 +110,28 @@ spell:
 
 Double-quoted spans in titles, steps and descriptive prose use the `quotes` policy; escaped quotation marks are kept within the span. A quote inside a table or docstring uses the table or docstring policy instead. Unmatched quotes remain part of the surrounding text. Unquoted title text uses the specification policy.
 
-Feature, rule and scenario tags can override a policy with a comma-separated list, for example `@spell-content=en-US,de-DE`, `@spell-quotes=de-DE`, or `@spell-prose=en-GB`. Supported region names are `prose`, `content`, `quotes`, `tables`, `dataTables`, `examples`, and `docStrings`. Within each scope a more specific region overrides a broader one; a child scope overrides its parent, even when the parent is more specific. Thus policies apply in global, feature, rule, scenario, then Examples scope order. Locale lists replace earlier selections, not append to them. Existing `@spellchecker-language` and exclusion tags continue to work. A docstring's `language=...` override takes precedence for that docstring.
+Tags override spelling settings for a Feature, Rule, Scenario or Examples block:
+
+| Tag | Effect |
+| --- | --- |
+| `@spell=off` | Disable spelling in the scope. |
+| `@spell.specification=en-GB` | Set the single language for titles, steps, and headers. |
+| `@spell.prose=en-GB,de-DE` | Set languages for prose. |
+| `@spell.content=en-US,de-DE` | Set default languages for content regions. |
+| `@spell.quotes=de-DE` | Set languages for quoted content. |
+| `@spell.tables=de-DE` | Set languages for step data tables and Examples values. |
+| `@spell.data-tables=de-DE` | Set languages for step data tables. |
+| `@spell.examples=de-DE` | Set languages for Examples values. |
+| `@spell.docstrings=de-DE` | Set languages for docstrings. |
+
+Use `off` in place of a locale list to disable a region, for example `@spell.tables=off`. A narrower region can re-enable checking with a locale list. The specification language must be one locale and cannot be `off`; use `@spell=off` to disable spelling across the scope. A Feature-only tag `@step-data-table-header=true` or `@step-data-table-header=false` overrides the configured convention for the entire Feature.
+
+Within each scope a more specific region overrides a broader one; a child scope overrides its parent, even when the parent is more specific. Policies apply in configuration, Feature, Rule, Scenario, then Examples scope order. Locale lists replace earlier selections, not append to them. A docstring's `language=...` overrides its language when it is checked. The earlier tags such as `@spell-content=en-US,de-DE`, `@spell-dataTables=de-DE`, and `@spell-docStrings=de-DE` remain supported. Legacy `@spellchecker-ignore` exclusions continue to accumulate and cannot be overridden by language tags.
 
 Shared configuration inheritance merges spelling settings by region and property. A YAML `dictionary` path is relative to the file declaring it; `--dictionary` overrides it relative to the working directory. Spelling is enabled without a configuration; parsing always runs before selected checks.
 
 `cuke check --fix --dictionary spellchecker/ features/` adds unknown words to project dictionaries and reports each addition. A forbidden word remains an error and is never added. The command rechecks after additions and reports any remaining findings. It requires an existing dictionary directory (or an existing direct dictionary file) to fix unknown words. New entries are inserted near alphabetical position without reordering existing entries or comments.
 
-Additions go to the feature's specification-language dictionary: `en.dic` for US English, `en-GB.dic` for British English, or `de.dic` for German, even for a region with a different or multiple locales. A direct dictionary file is always its own destination. The specification language may differ from a region's selected locales, leaving a word unresolved; the recheck reports it.
+Additions go to the applicable specification-language dictionary: `en.dic` for US English, `en-GB.dic` for British English, or `de.dic` for German, even for a region with a different or multiple locales. A direct dictionary file is always its own destination. The specification language may differ from a region's selected locales, leaving a word unresolved; the recheck reports it.
 
 The dictionaries have separate licenses; see [third-party dictionary notices](THIRD_PARTY_NOTICES.md) for licenses, source locations and distribution notes.

@@ -11,7 +11,7 @@ export function spellingLocale(value: string): string {
   return locale;
 }
 
-export type Policy = { locale?: string; locales?: string[] };
+export type Policy = { locale?: string; locales?: string[]; off?: boolean };
 export type Region = 'prose' | 'content' | 'quotes' | 'tables' | 'dataTables' | 'examples' | 'docStrings';
 export type SnippetMode = 'json' | 'text' | 'ignore';
 export type SpellConfig = { dialects?: Record<string, string>; specification?: Record<string, string>; docStringTypes?: Record<string, SnippetMode> } & Partial<Record<Region, Policy>>;
@@ -49,6 +49,8 @@ export function parseSpelling(value: unknown, source: string): SpellConfig {
 
 export function mergePolicy(base: Policy = {}, override: Policy = {}): Policy {
   const inherited = { ...base };
+  if (override.locale !== undefined || override.locales !== undefined) delete inherited.off;
+  if (override.off) { delete inherited.locale; delete inherited.locales; }
   if (override.locale !== undefined) delete inherited.locales;
   if (override.locales !== undefined) delete inherited.locale;
   return { ...inherited, ...override };

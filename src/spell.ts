@@ -10,14 +10,47 @@ import type { Reporter } from './diagnostics.js';
 const require = createRequire(import.meta.url);
 
 type Exclusion = 'tables' | 'examples' | 'docStrings';
-type Scope = Partial<Record<Region, Policy>> & { ignored?: Set<Exclusion> };
-function tagPolicy(tags: readonly Tag[], file: string, reporter: Reporter, reportErrors = true): Scope {
+type Scope = Partial<Record<Region, Policy>> & { ignored?: Set<Exclusion>; all?: Policy; specificationLocale?: string; stepHeader?: boolean };
+function tagPolicy(tags: readonly Tag[], file: string, reporter: Reporter, reportErrors = true, feature = false): Scope {
   const result: Scope = {};
   function invalid(tag: Tag, message: string): void {
     if (!reportErrors) return;
     reporter.report({ path: file, line: tag.location.line, column: tag.location.column ?? 1, rule: 'spelling-option', severity: 'error', message: `${message}: ${tag.name}` });
   }
   for (const tag of tags) {
+    if (tag.name.startsWith('@step-data-table-header')) {
+      const match = /^@step-data-table-header=(true|false)$/u.exec(tag.name);
+      if (!match || !feature) invalid(tag, 'step data table header must be true or false on a Feature');
+      else result.stepHeader = match[1] === 'true';
+      continue;
+    }
+    if (tag.name.startsWith('@spell=')) {
+      if (tag.name === '@spell=off') result.all = { off: true };
+      else invalid(tag, 'invalid spelling option');
+      continue;
+    }
+    if (tag.name.startsWith('@spell.specification')) {
+      const match = /^@spell\.specification=(.+)$/u.exec(tag.name);
+      try {
+        if (!match) throw new Error('missing language');
+        result.specificationLocale = spellingLocale(match[1]);
+      } catch { invalid(tag, 'invalid specification language'); }
+      continue;
+    }
+    if (tag.name.startsWith('@spell.')) {
+      const match = /^@spell\.(prose|content|quotes|tables|data-tables|examples|docstrings)=(.*)$/u.exec(tag.name);
+      if (!match) { invalid(tag, 'unknown spelling option'); continue; }
+      const names: Record<string, Region> = { prose: 'prose', content: 'content', quotes: 'quotes', tables: 'tables', 'data-tables': 'dataTables', examples: 'examples', docstrings: 'docStrings' };
+      const region = names[match[1]];
+      if (match[2] === 'off') { result[region] = { off: true }; continue; }
+      const values = match[2].split(',');
+      try {
+        if (values.some(value => !value)) throw new Error('invalid locale list');
+        values.forEach(spellingLocale);
+        result[region] = { locales: values };
+      } catch { invalid(tag, 'invalid spelling locales'); }
+      continue;
+    }
     if (tag.name.startsWith('@spellchecker-ignore')) {
       const match = /^@spellchecker-ignore=(.+)$/u.exec(tag.name);
       const ignored = match?.[1].split(',') ?? [];
@@ -72,6 +105,7 @@ function combine(base: Policy, region: Region, ...scopes: Scope[]): Policy {
     result = mergePolicy(result, policy);
   };
   for (const scope of scopes) {
+    apply(scope.all);
     if (['quotes', 'docStrings', 'dataTables', 'examples'].includes(region)) apply(scope.content);
     if (region === 'dataTables' || region === 'examples') apply(scope.tables);
     apply(scope[region]);
@@ -137,10 +171,17 @@ export class SpellingFixes {
 
 export async function checkSpelling(feature: Feature | undefined, source: string, file: string, dictionaryDir: string | undefined, config: SpellConfig = {}, reporter: Reporter, fixes?: SpellingFixes, stepTableHeader = false): Promise<void> {
   if (!feature) return;
-  const defaultLocale = spellingLocale(config.specification?.[feature.language] ?? config.dialects?.[feature.language] ?? feature.language);
+  let defaultLocale = spellingLocale(config.specification?.[feature.language] ?? config.dialects?.[feature.language] ?? feature.language);
   const lines = source.split(/\r?\n/u);
-  const featureScope = tagPolicy(feature.tags, file, reporter, !fixes);
-  const base: Policy = { locale: defaultLocale };
+  const featureScope = tagPolicy(feature.tags, file, reporter, !fixes, true);
+  stepTableHeader = featureScope.stepHeader ?? stepTableHeader;
+  const configuredLocale = defaultLocale;
+  function specification(scopes: Scope[]): Policy {
+    defaultLocale = scopes.reduce((value, scope) => scope.specificationLocale ?? value, configuredLocale);
+    let result: Policy = { locale: defaultLocale };
+    for (const scope of scopes) if (scope.all) result = mergePolicy(result, scope.all);
+    return result;
+  }
   const cache = new Map<string, { settings: Parameters<typeof getDictionary>[0]; dictionary: Awaited<ReturnType<typeof getDictionary>> }>();
   const directoryStat = dictionaryDir ? statSync(dictionaryDir) : undefined;
   const sharedFiles = dictionaryDir && directoryStat?.isDirectory()
@@ -150,7 +191,7 @@ export async function checkSpelling(feature: Feature | undefined, source: string
     : [];
 
   async function text(value: string, line: number, column: number, policy: Policy, positions?: number[]) {
-    if (!value) return;
+    if (!value || policy.off) return;
     const selectedLocales = (policy.locales ?? [policy.locale ?? defaultLocale]).map(spellingLocale);
     const key = JSON.stringify(selectedLocales);
     let entry = cache.get(key);
@@ -263,6 +304,7 @@ export async function checkSpelling(feature: Feature | undefined, source: string
   }
   async function scenario(node: Scenario | Background, parent: Scope[]) {
     const scopes = 'tags' in node ? [...parent, tagPolicy(node.tags, file, reporter, !fixes)] : parent;
+    const base = specification(scopes);
     const textPolicy = base;
     await header(node, textPolicy, combine(base, 'prose', config, ...scopes), combine(base, 'quotes', config, ...scopes));
     for (const step of node.steps) {
@@ -316,19 +358,22 @@ export async function checkSpelling(feature: Feature | undefined, source: string
     }
     if ('examples' in node) for (const example of node.examples) {
       const exampleScopes = [...scopes, tagPolicy(example.tags, file, reporter, !fixes)];
-      await header(example, textPolicy, combine(base, 'prose', config, ...exampleScopes), combine(base, 'quotes', config, ...exampleScopes));
-      if (example.tableHeader) await row(example.tableHeader, base);
-      if (!ignored(exampleScopes, 'examples')) for (const item of example.tableBody ?? []) await row(item, combine(base, 'examples', config, ...exampleScopes));
+      const exampleBase = specification(exampleScopes);
+      await header(example, exampleBase, combine(exampleBase, 'prose', config, ...exampleScopes), combine(exampleBase, 'quotes', config, ...exampleScopes));
+      if (example.tableHeader) await row(example.tableHeader, exampleBase);
+      if (!ignored(exampleScopes, 'examples')) for (const item of example.tableBody ?? []) await row(item, combine(exampleBase, 'examples', config, ...exampleScopes));
     }
   }
   async function rule(node: Rule, parent: Scope[]) {
     const scopes = [...parent, tagPolicy(node.tags, file, reporter, !fixes)];
+    const base = specification(scopes);
     await header(node, base, combine(base, 'prose', config, ...scopes), combine(base, 'quotes', config, ...scopes));
     for (const child of node.children) {
       if (child.scenario) await scenario(child.scenario, scopes);
       if (child.background) await scenario(child.background, scopes);
     }
   }
+  const base = specification([featureScope]);
   await header(feature, base, combine(base, 'prose', config, featureScope), combine(base, 'quotes', config, featureScope));
   for (const child of feature.children) {
     if (child.rule) await rule(child.rule, [featureScope]);
