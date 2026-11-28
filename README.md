@@ -140,3 +140,13 @@ Shared configuration inheritance merges spelling settings by region and property
 Additions go to the applicable specification-language dictionary: `en.dic` for US English, `en-GB.dic` for British English, or `de.dic` for German, even for a region with a different or multiple locales. A direct dictionary file is always its own destination. The specification language may differ from a region's selected locales, leaving a word unresolved; the recheck reports it.
 
 The dictionaries have separate licenses; see [third-party dictionary notices](THIRD_PARTY_NOTICES.md) for licenses, source locations and distribution notes.
+
+## Formatting
+
+Run `cuke check --only format features/` to check formatting, or add `--fix` to write changes. Select formatting alongside other checks with `checks: [spell, format]`. Tag lines are preserved by default; set `format.tags` to `one-per-line` or `single-line` to choose another layout. Inline explanations stay attached to their tags.
+
+```yaml
+checks: [spell, format]
+format:
+  tags: preserve
+```

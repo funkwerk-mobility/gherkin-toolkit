@@ -3,15 +3,17 @@ import { dirname, resolve } from 'node:path';
 import { parse } from 'yaml';
 import { mergeSpelling, parseSpelling, type SpellConfig } from './policies.js';
 
-export type Check = 'spell';
-export type Configuration = { checks: Check[]; dictionary?: string; spell?: SpellConfig; diagnosticLimit?: number; stepTableHeader?: boolean };
+import type { TagLayout } from './format.js';
+
+export type Check = 'spell' | 'format';
+export type Configuration = { checks: Check[]; dictionary?: string; spell?: SpellConfig; diagnosticLimit?: number; stepTableHeader?: boolean; tagLayout?: TagLayout };
 
 function checks(value: unknown, source: string): Check[] {
   if (!Array.isArray(value) || value.some(item => typeof item !== 'string')) {
     throw new Error(`${source}: checks must be a list of check names`);
   }
   for (const name of value) {
-    if (name !== 'spell') throw new Error(`${source}: unknown or unavailable check: ${name}`);
+    if (name !== 'spell' && name !== 'format') throw new Error(`${source}: unknown or unavailable check: ${name}`);
   }
   return value as Check[];
 }
@@ -37,13 +39,17 @@ export function resolveConfiguration(path: string | undefined, only: string[] | 
       if (typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error(`${file}: configuration must be a mapping`);
       const config = parsed as Record<string, unknown>;
       for (const key of Object.keys(config)) {
-        if (key !== 'checks' && key !== 'extends' && key !== 'dictionary' && key !== 'spell' && key !== 'diagnostics' && key !== 'tables') throw new Error(`${file}: unknown setting: ${key}`);
+        if (key !== 'checks' && key !== 'extends' && key !== 'dictionary' && key !== 'spell' && key !== 'diagnostics' && key !== 'tables' && key !== 'format') throw new Error(`${file}: unknown setting: ${key}`);
       }
       if (config.extends !== undefined && (typeof config.extends !== 'string' || !config.extends)) {
         throw new Error(`${file}: extends must be a path`);
       }
       if (config.dictionary !== undefined && (typeof config.dictionary !== 'string' || !config.dictionary)) {
         throw new Error(`${file}: dictionary must be a path`);
+      }
+      if (config.format !== undefined) {
+        const format = config.format;
+        if (!format || typeof format !== 'object' || Array.isArray(format) || Object.keys(format).some(key => key !== 'tags') || (Object.hasOwn(format, 'tags') && !['preserve', 'one-per-line', 'single-line'].includes(String((format as Record<string, unknown>).tags)))) throw new Error(`${file}: format.tags must be preserve, one-per-line or single-line`);
       }
       if (config.tables !== undefined) {
         const tables = config.tables;
@@ -61,6 +67,7 @@ export function resolveConfiguration(path: string | undefined, only: string[] | 
         dictionary: config.dictionary === undefined ? inherited.dictionary : resolve(dirname(file), config.dictionary as string),
         spell: mergeSpelling(inherited.spell, config.spell === undefined ? undefined : parseSpelling(config.spell, file)),
         diagnosticLimit: (config.diagnostics as { limit?: number } | undefined)?.limit ?? inherited.diagnosticLimit,
+        tagLayout: (config.format as { tags?: TagLayout } | undefined)?.tags ?? inherited.tagLayout,
         stepTableHeader: (config.tables as { stepHeader?: boolean } | undefined)?.stepHeader ?? inherited.stepTableHeader,
       };
     } finally { active.delete(canonical); }

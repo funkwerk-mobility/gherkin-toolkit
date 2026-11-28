@@ -67,10 +67,18 @@ export async function configure(args: string[]): Promise<void> {
   let changed = !exists;
 
   const checks = answer(await p.multiselect({ message: 'Checks to run by default', required: false,
-      options: [{ value: 'spell', label: 'Spelling' }], initialValues: current.checks }));
+      options: [{ value: 'spell', label: 'Spelling' }, { value: 'format', label: 'Formatting' }], initialValues: current.checks }));
   if (checks.join(',') !== current.checks.join(',')) { document.set('checks', checks); changed = true; }
   const stepHeader = answer(await p.confirm({ message: 'Step data tables have a header row?', initialValue: current.stepTableHeader ?? false }));
   if (stepHeader !== (current.stepTableHeader ?? false)) { document.setIn(['tables', 'stepHeader'], stepHeader); changed = true; }
+  if (checks.includes('format')) {
+    const tags = answer(await p.select({ message: 'Tag layout', options: [
+      { value: 'preserve', label: 'Keep existing line breaks' },
+      { value: 'one-per-line', label: 'One tag per line' },
+      { value: 'single-line', label: 'Combine tags on one line where possible' },
+    ], initialValue: current.tagLayout ?? 'preserve' }));
+    if (tags !== (current.tagLayout ?? 'preserve')) { document.setIn(['format', 'tags'], tags); changed = true; }
+  }
   if (checks.includes('spell')) {
     const initialDictionary = current.dictionary ? relative(process.cwd(), current.dictionary) || '.' : 'spellchecker';
     const dictionary = answer(await p.text({ message: 'Custom dictionary path (relative to the working directory)', initialValue: initialDictionary }));

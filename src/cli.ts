@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { readFileSync, readdirSync, statSync, realpathSync } from 'node:fs';
+import { readFileSync, readdirSync, statSync, realpathSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { AstBuilder, Errors, GherkinClassicTokenMatcher, Parser } from '@cucumber/gherkin';
 import { IdGenerator } from '@cucumber/messages';
@@ -7,6 +7,7 @@ import type { Feature } from '@cucumber/messages';
 import { resolveConfiguration, type Check } from './config.js';
 import type { SpellConfig } from './policies.js';
 import { Reporter, type OutputFormat } from './diagnostics.js';
+import { formatFeature, type TagLayout } from './format.js';
 import { configure, rememberedConfiguration } from './configure.js';
 
 function report(reporter: Reporter, path: string, error: unknown): void {
@@ -23,7 +24,7 @@ function report(reporter: Reporter, path: string, error: unknown): void {
   }
 }
 
-async function check(inputs: string[], checks: Check[], dictionary: string | undefined, verbose: boolean, fix: boolean, reporter: Reporter, policies?: SpellConfig, stepTableHeader = false): Promise<void> {
+async function check(inputs: string[], checks: Check[], dictionary: string | undefined, verbose: boolean, fix: boolean, reporter: Reporter, policies?: SpellConfig, stepTableHeader = false, tagLayout: TagLayout = 'preserve'): Promise<void> {
   let spelling: typeof import('./spell.js') | undefined;
   let fixes: import('./spell.js').SpellingFixes | undefined;
   const checked: { feature?: Feature; source: string; path: string }[] = [];
@@ -41,8 +42,16 @@ async function check(inputs: string[], checks: Check[], dictionary: string | und
       } else if (stat.isFile()) {
         if (verbose) reporter.progress(`Parsing: ${path}`);
         const parser = new Parser(new AstBuilder(IdGenerator.incrementing()), new GherkinClassicTokenMatcher());
-        const source = readFileSync(path, 'utf8');
-        const document = parser.parse(source);
+        let source = readFileSync(path, 'utf8');
+        let document = parser.parse(source);
+        if (checks.includes('format')) {
+          if (verbose) reporter.progress(`Checking formatting: ${path}`);
+          const formatted = formatFeature(source, document, tagLayout);
+          if (formatted !== source) {
+            if (fix) { writeFileSync(path, formatted); reporter.fixed(`Formatted: ${path}`); source = formatted; document = parser.parse(source); }
+            else reporter.report({ path, line: 1, column: 1, rule: 'format', severity: 'error', message: 'Formatting differs' });
+          }
+        }
         if (checks.includes('spell')) {
           if (verbose) reporter.progress(`Checking spelling: ${path}`);
           spelling ??= await import('./spell.js');
@@ -113,7 +122,7 @@ if (process.argv[2] === 'configure') {
     }
     const selected = resolveConfiguration(config ?? rememberedConfiguration(), only);
     const reporter = new Reporter(format, limit ?? selected.diagnosticLimit ?? 100);
-    await check(inputs, selected.checks, dictionary ?? selected.dictionary, verbose, fix, reporter, selected.spell, selected.stepTableHeader);
+    await check(inputs, selected.checks, dictionary ?? selected.dictionary, verbose, fix, reporter, selected.spell, selected.stepTableHeader, selected.tagLayout);
     reporter.finish();
   } catch (error) {
     const reporter = new Reporter(errorFormat, 100);
