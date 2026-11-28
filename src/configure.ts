@@ -28,6 +28,9 @@ const languages = [
   { value: 'en-US', label: 'English (United States)' },
   { value: 'en-GB', label: 'English (United Kingdom)' },
   { value: 'de-DE', label: 'German' },
+  { value: 'fr-FR', label: 'French' },
+  { value: 'nb-NO', label: 'Norwegian Bokmål' },
+  { value: 'lb-LU', label: 'Luxembourgish' },
 ];
 const regions: { value: Region; label: string; name: string }[] = [
   { value: 'prose', label: 'Prose', name: 'Prose' }, { value: 'content', label: 'Content', name: 'Content' },
@@ -79,10 +82,10 @@ export async function configure(args: string[]): Promise<void> {
     ], initialValue: current.tagLayout ?? 'preserve' }));
     if (tags !== (current.tagLayout ?? 'preserve')) { document.setIn(['format', 'tags'], tags); changed = true; }
     const positive = (value: string | undefined) => value && /^[1-9]\d*$/u.test(value) && Number.isSafeInteger(Number(value)) ? undefined : 'Enter a positive integer.';
-    const width = Number(answer(await p.text({ message: 'Line width', initialValue: String(current.printWidth ?? 120), validate: positive })));
-    if (width !== (current.printWidth ?? 120)) { document.setIn(['format', 'printWidth'], width); changed = true; }
-    const indent = Number(answer(await p.text({ message: 'Indentation width', initialValue: String(current.indentWidth ?? 2), validate: positive })));
-    if (indent !== (current.indentWidth ?? 2)) { document.setIn(['format', 'indentWidth'], indent); changed = true; }
+    const width = Number(answer(await p.text({ message: 'Line width', initialValue: String(current.lineLength ?? 120), validate: positive })));
+    if (width !== (current.lineLength ?? 120)) { document.setIn(['format', 'lineLength'], width); changed = true; }
+    const indent = Number(answer(await p.text({ message: 'Indentation width', initialValue: String(current.indentation ?? 2), validate: positive })));
+    if (indent !== (current.indentation ?? 2)) { document.setIn(['format', 'indentation'], indent); changed = true; }
     const useTabs = answer(await p.confirm({ message: 'Use tabs for indentation?', initialValue: current.useTabs ?? false }));
     if (useTabs !== (current.useTabs ?? false)) { document.setIn(['format', 'useTabs'], useTabs); changed = true; }
   }
@@ -94,7 +97,7 @@ export async function configure(args: string[]): Promise<void> {
       changed = true;
     }
     const currentLocale = spellingLocale(current.spell?.specification?.en ?? current.spell?.dialects?.en ?? 'en-US');
-    const locale = answer(await p.select({ message: 'Specification language for English features', options: languages.filter(language => language.value !== 'de-DE'), initialValue: currentLocale }));
+    const locale = answer(await p.select({ message: 'Specification language for English features', options: languages.filter(language => language.value.startsWith('en-')), initialValue: currentLocale }));
     if (locale !== currentLocale) { document.setIn(['spell', 'specification', 'en'], locale); changed = true; }
 
     const initialRegions = regions.filter(({ value }) => document.hasIn(['spell', value, 'locale']) || document.hasIn(['spell', value, 'locales'])).map(({ value }) => value);

@@ -41,7 +41,7 @@ function formattingDifference(source: string, formatted: string): { line: number
   return { line: index + 1, column: column + 1, message: 'Formatting differs here' };
 }
 
-async function check(inputs: string[], checks: Check[], dictionary: string | undefined, verbose: boolean, fix: boolean, reporter: Reporter, policies?: SpellConfig, stepTableHeader = false, tagLayout: TagLayout = 'preserve', printWidth = 120, indentWidth = 2, useTabs = false): Promise<void> {
+async function check(inputs: string[], checks: Check[], dictionary: string | undefined, verbose: boolean, fix: boolean, reporter: Reporter, policies?: SpellConfig, stepTableHeader = false, tagLayout: TagLayout = 'preserve', lineLength = 120, indentation = 2, useTabs = false): Promise<void> {
   let spelling: typeof import('./spell.js') | undefined;
   let fixes: import('./spell.js').SpellingFixes | undefined;
   const checked: { feature?: Feature; source: string; path: string }[] = [];
@@ -63,7 +63,7 @@ async function check(inputs: string[], checks: Check[], dictionary: string | und
         let document = parser.parse(source);
         if (checks.includes('format')) {
           if (verbose) reporter.progress(`Checking formatting: ${path}`);
-          const formatted = formatFeature(source, document, tagLayout, { printWidth, indentWidth, useTabs });
+          const formatted = formatFeature(source, document, tagLayout, { lineLength, indentation, useTabs });
           if (formatted !== source) {
             if (fix) { writeFileSync(path, formatted); reporter.fixed(`Formatted: ${path}`); source = formatted; document = parser.parse(source); }
             else reporter.report({ path, ...formattingDifference(source, formatted), rule: 'format', severity: 'error' });
@@ -139,7 +139,7 @@ if (process.argv[2] === 'configure') {
     }
     const selected = resolveConfiguration(config ?? rememberedConfiguration(), only);
     const reporter = new Reporter(format, limit ?? selected.diagnosticLimit ?? 100);
-    await check(inputs, selected.checks, dictionary ?? selected.dictionary, verbose, fix, reporter, selected.spell, selected.stepTableHeader, selected.tagLayout, selected.printWidth, selected.indentWidth, selected.useTabs);
+    await check(inputs, selected.checks, dictionary ?? selected.dictionary, verbose, fix, reporter, selected.spell, selected.stepTableHeader, selected.tagLayout, selected.lineLength, selected.indentation, selected.useTabs);
     reporter.finish();
   } catch (error) {
     const reporter = new Reporter(errorFormat, 100);

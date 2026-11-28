@@ -9,6 +9,12 @@ import type { Reporter } from './diagnostics.js';
 
 const require = createRequire(import.meta.url);
 
+let luxembourgish: Promise<import('nspell')> | undefined;
+function loadLuxembourgish(): Promise<import('nspell')> {
+  return luxembourgish ??= Promise.all([import('nspell'), import('dictionary-lb')]).then(([nspell, dictionary]) =>
+    nspell.default(Buffer.from(dictionary.default.aff), Buffer.from(dictionary.default.dic)));
+}
+
 type Exclusion = 'tables' | 'examples' | 'docStrings';
 type Scope = Partial<Record<Region, Policy>> & { ignored?: Set<Exclusion>; all?: Policy; specificationLocale?: string; stepHeader?: boolean };
 function tagPolicy(tags: readonly Tag[], file: string, reporter: Reporter, reportErrors = true, feature = false): Scope {
@@ -118,7 +124,7 @@ function isLanguageDictionary(name: string): boolean {
   const lower = name.toLowerCase();
   return ['english', 'german', 'british', 'american', 'british-english', 'american-english'].includes(lower)
     || Object.keys(dialects).some(dialect => dialect.toLowerCase() === lower)
-    || Object.keys(locales).some(locale => locale.toLowerCase() === lower)
+    || Object.entries(locales).some(([locale, info]) => locale.toLowerCase() === lower || info.short === lower)
     || /^[a-z]{2,3}[-_](?:[a-z]{2}|[0-9]{3})$/iu.test(name);
 }
 
@@ -197,7 +203,7 @@ export async function checkSpelling(feature: Feature | undefined, source: string
     const key = JSON.stringify(selectedLocales);
     let entry = cache.get(key);
     if (!entry) {
-      const definitions = selectedLocales.map(locale => {
+      const definitions = selectedLocales.filter(locale => locale !== 'lb-LU').map(locale => {
         const info = locales[locale];
         return { name: locale, path: join(dirname(require.resolve(info.package)), info.file) };
       });
@@ -205,7 +211,7 @@ export async function checkSpelling(feature: Feature | undefined, source: string
       if (dictionaryDir && directoryStat?.isDirectory()) {
         for (const locale of selectedLocales) {
           const short = locales[locale].short;
-          for (const name of [locale, ...(short ? [short] : [])]) {
+          for (const name of [locale, ...(short ? [short] : []), ...(locale === 'nb-NO' ? ['no'] : [])]) {
             const wordFile = join(dictionaryDir, `${name}.dic`);
             if (existsSync(wordFile)) words.push(...readWords(wordFile));
           }
@@ -214,12 +220,13 @@ export async function checkSpelling(feature: Feature | undefined, source: string
       } else {
         if (dictionaryDir && selectedLocales.includes(defaultLocale)) words.push(...readWords(dictionaryDir));
       }
-      const settings = { dictionaryDefinitions: definitions, dictionaries: selectedLocales, minWordLength: 2, words: words.filter(word => !word.startsWith('!')), flagWords: words.filter(word => word.startsWith('!')).map(word => word.slice(1)) };
+      const settings = { dictionaryDefinitions: definitions, dictionaries: selectedLocales.filter(locale => locale !== 'lb-LU'), minWordLength: 2, words: words.filter(word => !word.startsWith('!')), flagWords: words.filter(word => word.startsWith('!')).map(word => word.slice(1)) };
       entry = { settings, dictionary: await getDictionary(settings) };
       cache.set(key, entry);
     }
     const normalized = value.replace(/’/gu, "'");
-    const invalid = [...normalized.matchAll(/[\p{L}\p{M}]+(?:'[\p{L}\p{M}]+)+/gu)].filter(match => !entry!.dictionary.has(match[0]));
+    const lux = selectedLocales.includes('lb-LU') ? await loadLuxembourgish() : undefined;
+    const invalid = [...normalized.matchAll(/[\p{L}\p{M}]+(?:'[\p{L}\p{M}]+)+/gu)].filter(match => !entry!.dictionary.has(match[0]) && !lux?.correct(match[0]));
     function diagnostic(offset: number, word: string, forbidden = false) {
       const location = `${file}:${line}:${column + (positions?.[offset] ?? offset)}`;
       if (fixes && forbidden) return;
@@ -235,6 +242,7 @@ export async function checkSpelling(feature: Feature | undefined, source: string
     for (const match of invalid) diagnostic(match.index, value.slice(match.index, match.index + match[0].length), issues.some(issue => issue.isFlagged && issue.offset >= match.index && issue.offset < match.index + match[0].length));
     for (const issue of issues) {
       if (invalid.some(match => issue.offset >= match.index && issue.offset < match.index + match[0].length)) continue;
+      if (!issue.isFlagged && lux?.correct(issue.text)) continue;
       diagnostic(issue.offset, value.slice(issue.offset, issue.offset + issue.text.length), issue.isFlagged);
     }
   }

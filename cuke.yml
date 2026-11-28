@@ -1,5 +1,6 @@
 checks:
   - spell
+  - format
 spell:
   content: { locales: [en-US, de-DE] }
   prose: {}
@@ -9,3 +10,5 @@ spell:
 tables:
   stepHeader: true
 dictionary: spellchecker
+format:
+  tags: preserve

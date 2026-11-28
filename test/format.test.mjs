@@ -90,7 +90,7 @@ test('normalizes spacing after section keywords without changing title content',
 test('normalizes spacing and wraps prose and tags with configurable indentation', () => {
   const dir = workspace();
   const file = join(dir, 'sample.feature');
-  writeFileSync(join(dir, 'cuke.yml'), 'checks: [format]\nformat:\n  printWidth: 30\n  indentWidth: 4\n  useTabs: false\n  tags: single-line\n');
+  writeFileSync(join(dir, 'cuke.yml'), 'checks: [format]\nformat:\n  lineLength: 30\n  indentation: 4\n  useTabs: false\n  tags: single-line\n');
   writeFileSync(file, 'Feature: Example\n  This  is a long description with many words to wrap.\n\n\n  @first @second @third @fourth\n  Scenario: Example\n    Given   a train\n');
   const fix = run(dir, '--config', 'cuke.yml', '--fix', 'sample.feature');
   assert.strictEqual(fix.status, 0, fix.stderr);
@@ -100,7 +100,7 @@ test('normalizes spacing and wraps prose and tags with configurable indentation'
 
 test('supports tabs for indentation', () => {
   const dir = workspace();
-  writeFileSync(join(dir, 'cuke.yml'), 'checks: [format]\nformat:\n  indentWidth: 4\n  useTabs: true\n');
+  writeFileSync(join(dir, 'cuke.yml'), 'checks: [format]\nformat:\n  indentation: 4\n  useTabs: true\n');
   writeFileSync(join(dir, 'sample.feature'), 'Feature: Example\n  Scenario: Example\n    Given a train\n');
   const fix = run(dir, '--config', 'cuke.yml', '--fix', 'sample.feature');
   assert.strictEqual(fix.status, 0, fix.stderr);

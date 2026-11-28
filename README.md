@@ -61,7 +61,7 @@ The wizard remembers the chosen configuration for subsequent checks when complet
 
 Feature, rule, scenario and Examples tags support `@spellchecker-ignore=tables,examples,docStrings`. Exclusions accumulate in nested scopes: `tables` skips step data tables, `examples` skips Examples values (not headers), and `docStrings` skips docstring contents. Prose and steps continue to be checked. An Examples tag applies only to that Examples block. Invalid options produce an error.
 
-The tag `@spellchecker-language=de` changes the language for Examples values and docstrings in its scope; it does not change steps, step tables or Examples headers. An Examples tag affects that block only. A docstring can set its own language with an opening delimiter such as `"""language=de`. Supported values are `en`, `en-US`, `en-GB`, `de` and `de-DE`. Other typed docstrings are handled separately.
+The tag `@spellchecker-language=de` changes the language for Examples values and docstrings in its scope; it does not change steps, step tables or Examples headers. An Examples tag affects that block only. A docstring can set its own language with an opening delimiter such as `"""language=de`. Supported values are `en`, `en-US`, `en-GB`, `de`, `de-DE`, `fr`, `fr-FR`, `no`, `nb`, `nb-NO`, `lb` and `lb-LU`. Other typed docstrings are handled separately.
 
 Enable spelling with `checks: [spell]` in YAML, or run it on its own:
 
@@ -83,7 +83,7 @@ spell:
 
 Content-type names are matched case-insensitively against lowercase configuration keys. The modes are `json`, `text` and `ignore`; child configurations override individual keys. The normal docstring language policy applies to checked content. JSON mode scans string tokens and does not validate JSON syntax.
 
-A custom dictionary directory contains UTF-8 word lists with one word per line; blank lines and lines starting with `#` are ignored. Prefix a word with `!` to forbid it, even if an ordinary dictionary accepts it. Locale-specific forbidden entries apply only when that locale is selected; forbidden entries in shared dictionaries apply everywhere. Locale-specific files are selected only for their locale: `en-US.dic` or `en.dic` for US English, `en-GB.dic` for British English, and `de-DE.dic` or `de.dic` for German. Both corresponding filenames are loaded if present. These files are optional. A direct `--dictionary` file is applied only to the feature's default locale.
+A custom dictionary directory contains UTF-8 word lists with one word per line; blank lines and lines starting with `#` are ignored. Prefix a word with `!` to forbid it, even if an ordinary dictionary accepts it. Locale-specific forbidden entries apply only when that locale is selected; forbidden entries in shared dictionaries apply everywhere. Locale-specific files are selected only for their locale: `en-US.dic` or `en.dic` for US English, `en-GB.dic` for British English, and `de-DE.dic` or `de.dic` for German. French uses `fr-FR.dic` and `fr.dic`; Bokmål uses `nb-NO.dic`, `nb.dic` and `no.dic`; Luxembourgish uses `lb-LU.dic` and `lb.dic`. All matching filenames are loaded if present. These files are optional. A direct `--dictionary` file is applied only to the feature's default locale.
 
 All non-language `.dic` files in the directory, such as `places.dic` and `terms.dic`, are used in every spelling region. Filenames matching Gherkin keyword languages, locale codes such as `en-GB`, and common language names such as `english` and `german` are treated as language dictionaries and are not shared. Use language-code names for locale dictionaries.
 
@@ -104,7 +104,7 @@ spell:
     locales: [en-US, de-DE]
 ```
 
-`specification` maps each feature's Gherkin keyword language to one spelling locale for titles and unquoted step text. Defaults are `en: en-US` and `de: de-DE`; an unmapped, unsupported keyword language is an error. The previously supported `dialects` map remains available; `specification` takes precedence when both specify a language.
+`specification` maps each feature's Gherkin keyword language to one spelling locale for titles and unquoted step text. Defaults are `en: en-US`, `de: de-DE`, `fr: fr-FR` and `no: nb-NO`; an unmapped, unsupported keyword language is an error. The previously supported `dialects` map remains available; `specification` takes precedence when both specify a language.
 
 `prose` covers descriptive paragraphs and defaults to the specification locale independently of `content`. The `content` policy is the default for `quotes` in titles, prose and steps, `docStrings`, step `dataTables`, and `examples` values. Without an override, content also defaults to the specification locale. `tables` overrides `content` for both data tables and Examples values; `dataTables` and `examples` override `tables`. Table headers use the specification locale unless `tableHeaders` is configured. A region accepts a word if any of its selected locales or a shared dictionary accepts it. A region can use `locale` for one language or `locales` for a nonempty list; a list replaces an inherited list.
 
@@ -137,7 +137,9 @@ Shared configuration inheritance merges spelling settings by region and property
 
 `cuke check --fix --dictionary spellchecker/ features/` adds unknown words to project dictionaries and reports each addition. A forbidden word remains an error and is never added. The command rechecks after additions and reports any remaining findings. It requires an existing dictionary directory (or an existing direct dictionary file) to fix unknown words. New entries are inserted near alphabetical position without reordering existing entries or comments.
 
-Additions go to the applicable specification-language dictionary: `en.dic` for US English, `en-GB.dic` for British English, or `de.dic` for German, even for a region with a different or multiple locales. A direct dictionary file is always its own destination. The specification language may differ from a region's selected locales, leaving a word unresolved; the recheck reports it.
+Additions go to the applicable specification-language dictionary: `en.dic` for US English, `en-GB.dic` for British English, `de.dic` for German, `fr.dic` for French, `nb.dic` for Bokmål, or `lb.dic` for Luxembourgish, even for a region with a different or multiple locales. A direct dictionary file is always its own destination. The specification language may differ from a region's selected locales, leaving a word unresolved; the recheck reports it.
+
+Luxembourgish (`lb` or `lb-LU`) uses an on-demand Hunspell-style adapter. The Gherkin parser has no Luxembourgish keyword dialect, but Luxembourgish can be selected for a region or as the specification language using a tag or configuration. The adapter does not implement every Hunspell affix option, so some valid words may need custom dictionary entries.
 
 The dictionaries have separate licenses; see [third-party dictionary notices](THIRD_PARTY_NOTICES.md) for licenses, source locations and distribution notes.
 
@@ -149,9 +151,9 @@ Run `cuke check --only format features/` to check formatting, or add `--fix` to 
 checks: [spell, format]
 format:
   tags: preserve
-  printWidth: 120
-  indentWidth: 2
+  lineLength: 120
+  indentation: 2
   useTabs: false
 ```
 
-Prose is wrapped to `printWidth`, and tags wrap at that width when kept together. `indentWidth` controls spaces per level, or the display width of a tab when `useTabs` is true. Whitespace in docstrings, quoted text, and table padding is preserved. Fixing repeated spaces in step text can change which step definition matches.
+Prose is wrapped to `lineLength`, and tags wrap at that width when kept together. `indentation` controls spaces per level, or the display width of a tab when `useTabs` is true. Whitespace in docstrings, quoted text, and table padding is preserved. Fixing repeated spaces in step text can change which step definition matches.

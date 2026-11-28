@@ -1,9 +1,12 @@
 export const locales: Record<string, { package: string; file: string; short?: string }> = {
   'en-US': { package: '@cspell/dict-en_us', file: 'en_US.trie.gz', short: 'en' },
   'en-GB': { package: '@cspell/dict-en-gb', file: 'en_GB.trie.gz' },
+  'fr-FR': { package: '@cspell/dict-fr-fr', file: 'fr-fr.trie.gz', short: 'fr' },
+  'nb-NO': { package: '@cspell/dict-nb-no', file: 'dict/nb-no.trie.gz', short: 'nb' },
+  'lb-LU': { package: 'dictionary-lb', file: '', short: 'lb' },
   'de-DE': { package: '@cspell/dict-de-de', file: 'de_DE.trie.gz', short: 'de' },
 };
-const aliases: Record<string, string> = { en: 'en-US', de: 'de-DE' };
+const aliases: Record<string, string> = { en: 'en-US', de: 'de-DE', fr: 'fr-FR', no: 'nb-NO', nb: 'nb-NO', lb: 'lb-LU' };
 
 export function spellingLocale(value: string): string {
   const locale = aliases[value] ?? value;
