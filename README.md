@@ -44,7 +44,7 @@ Use `cuke check --config project/cuke.yml --only spell features/` to override th
 
 Run `cuke configure` in a terminal to create or edit a YAML configuration interactively. The wizard takes you through checks and, if spelling is enabled, its dictionary path, English specification language and optional language overrides. Use the arrow keys and space bar to choose options. The dictionary path is relative to the working directory and defaults to `spellchecker`; the wizard stores it relative to the configuration file so it continues to resolve correctly. Existing settings and YAML comments are preserved. Other spelling settings can be edited directly in YAML.
 
-The wizard shows the relationship between content, the shared table setting, and the separate step-table and Examples-table overrides. The selections are independent: a broader setting supplies a default, and a more specific selection overrides it. Examples headers use the specification language.
+The wizard shows the relationship between content, the shared table setting, and the separate step-table and Examples-table overrides. The selections are independent: a broader setting supplies a default, and a more specific selection overrides it. Table headers use the specification language unless a table-header language override is configured.
 
 Step tables are checked in the step-table language by default, including the first row. To treat the first row as a header and check it in the specification language instead, enable the wizard's table-header switch or set this top-level convention:
 
@@ -106,7 +106,7 @@ spell:
 
 `specification` maps each feature's Gherkin keyword language to one spelling locale for titles and unquoted step text. Defaults are `en: en-US` and `de: de-DE`; an unmapped, unsupported keyword language is an error. The previously supported `dialects` map remains available; `specification` takes precedence when both specify a language.
 
-`prose` covers descriptive paragraphs and defaults to the specification locale independently of `content`. The `content` policy is the default for `quotes` in titles, prose and steps, `docStrings`, step `dataTables`, and `examples` values. Without an override, content also defaults to the specification locale. `tables` overrides `content` for both data tables and Examples values; `dataTables` and `examples` override `tables`. Examples headers use the specification locale. A region accepts a word if any of its selected locales or a shared dictionary accepts it. A region can use `locale` for one language or `locales` for a nonempty list; a list replaces an inherited list.
+`prose` covers descriptive paragraphs and defaults to the specification locale independently of `content`. The `content` policy is the default for `quotes` in titles, prose and steps, `docStrings`, step `dataTables`, and `examples` values. Without an override, content also defaults to the specification locale. `tables` overrides `content` for both data tables and Examples values; `dataTables` and `examples` override `tables`. Table headers use the specification locale unless `tableHeaders` is configured. A region accepts a word if any of its selected locales or a shared dictionary accepts it. A region can use `locale` for one language or `locales` for a nonempty list; a list replaces an inherited list.
 
 Double-quoted spans in titles, steps and descriptive prose use the `quotes` policy; escaped quotation marks are kept within the span. A quote inside a table or docstring uses the table or docstring policy instead. Unmatched quotes remain part of the surrounding text. Unquoted title text uses the specification policy.
 
@@ -121,8 +121,13 @@ Tags override spelling settings for a Feature, Rule, Scenario or Examples block:
 | `@spell.quotes=de-DE` | Set languages for quoted content. |
 | `@spell.tables=de-DE` | Set languages for step data tables and Examples values. |
 | `@spell.data-tables=de-DE` | Set languages for step data tables. |
+| `@spell.tables.headers=en,de` | Set languages for table headers. |
 | `@spell.examples=de-DE` | Set languages for Examples values. |
 | `@spell.docstrings=de-DE` | Set languages for docstrings. |
+
+`en` and `de` follow the configured `spell.specification` mapping for those Gherkin keyword languages; without a mapping they mean `en-US` and `de-DE`. Explicit locales such as `en-GB` always retain their meaning. The wizard’s English specification language selection therefore also sets the meaning of `en`.
+
+The `tableHeaders` YAML region and `@spell.tables.headers` tag apply to Examples headers and, when `tables.stepHeader` is enabled, the first row of step data tables. They do not change whether a row is a header.
 
 Use `off` in place of a locale list to disable a region, for example `@spell.tables=off`. A narrower region can re-enable checking with a locale list. The specification language must be one locale and cannot be `off`; use `@spell=off` to disable spelling across the scope. A Feature-only tag `@step-data-table-header=true` or `@step-data-table-header=false` overrides the configured convention for the entire Feature.
 

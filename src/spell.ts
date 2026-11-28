@@ -4,7 +4,7 @@ import { dialects } from '@cucumber/gherkin';
 import { dirname, join } from 'node:path';
 import { getDictionary, validateText } from 'cspell-lib';
 import type { Background, Examples, Feature, Rule, Scenario, Step, TableRow, Tag } from '@cucumber/messages';
-import { locales, mergePolicy, spellingLocale, type Policy, type Region, type SpellConfig } from './policies.js';
+import { configuredLocale, locales, mergePolicy, spellingLocale, type Policy, type Region, type SpellConfig } from './policies.js';
 import type { Reporter } from './diagnostics.js';
 
 const require = createRequire(import.meta.url);
@@ -33,14 +33,15 @@ function tagPolicy(tags: readonly Tag[], file: string, reporter: Reporter, repor
       const match = /^@spell\.specification=(.+)$/u.exec(tag.name);
       try {
         if (!match) throw new Error('missing language');
-        result.specificationLocale = spellingLocale(match[1]);
+        spellingLocale(match[1]);
+        result.specificationLocale = match[1];
       } catch { invalid(tag, 'invalid specification language'); }
       continue;
     }
     if (tag.name.startsWith('@spell.')) {
-      const match = /^@spell\.(prose|content|quotes|tables|data-tables|examples|docstrings)=(.*)$/u.exec(tag.name);
+      const match = /^@spell\.(prose|content|quotes|tables|data-tables|tables\.headers|examples|docstrings)=(.*)$/u.exec(tag.name);
       if (!match) { invalid(tag, 'unknown spelling option'); continue; }
-      const names: Record<string, Region> = { prose: 'prose', content: 'content', quotes: 'quotes', tables: 'tables', 'data-tables': 'dataTables', examples: 'examples', docstrings: 'docStrings' };
+      const names: Record<string, Region> = { prose: 'prose', content: 'content', quotes: 'quotes', tables: 'tables', 'data-tables': 'dataTables', 'tables.headers': 'tableHeaders', examples: 'examples', docstrings: 'docStrings' };
       const region = names[match[1]];
       if (match[2] === 'off') { result[region] = { off: true }; continue; }
       const values = match[2].split(',');
@@ -171,13 +172,13 @@ export class SpellingFixes {
 
 export async function checkSpelling(feature: Feature | undefined, source: string, file: string, dictionaryDir: string | undefined, config: SpellConfig = {}, reporter: Reporter, fixes?: SpellingFixes, stepTableHeader = false): Promise<void> {
   if (!feature) return;
-  let defaultLocale = spellingLocale(config.specification?.[feature.language] ?? config.dialects?.[feature.language] ?? feature.language);
+  let defaultLocale = configuredLocale(feature.language, config);
   const lines = source.split(/\r?\n/u);
   const featureScope = tagPolicy(feature.tags, file, reporter, !fixes, true);
   stepTableHeader = featureScope.stepHeader ?? stepTableHeader;
-  const configuredLocale = defaultLocale;
+  const configuredDefaultLocale = defaultLocale;
   function specification(scopes: Scope[]): Policy {
-    defaultLocale = scopes.reduce((value, scope) => scope.specificationLocale ?? value, configuredLocale);
+    defaultLocale = scopes.reduce((value, scope) => scope.specificationLocale ? configuredLocale(scope.specificationLocale, config) : value, configuredDefaultLocale);
     let result: Policy = { locale: defaultLocale };
     for (const scope of scopes) if (scope.all) result = mergePolicy(result, scope.all);
     return result;
@@ -192,7 +193,7 @@ export async function checkSpelling(feature: Feature | undefined, source: string
 
   async function text(value: string, line: number, column: number, policy: Policy, positions?: number[]) {
     if (!value || policy.off) return;
-    const selectedLocales = (policy.locales ?? [policy.locale ?? defaultLocale]).map(spellingLocale);
+    const selectedLocales = (policy.locales ?? [policy.locale ?? defaultLocale]).map(locale => configuredLocale(locale, config));
     const key = JSON.stringify(selectedLocales);
     let entry = cache.get(key);
     if (!entry) {
@@ -312,7 +313,7 @@ export async function checkSpelling(feature: Feature | undefined, source: string
       const pos = lines[line - 1].indexOf(step.text, (step.location.column ?? 1) - 1 + step.keyword.length);
       await textWithQuotes(step.text, line, pos + 1, textPolicy, combine(base, 'quotes', config, ...scopes));
       if (step.dataTable && !ignored(scopes, 'tables')) for (const [index, item] of step.dataTable.rows.entries()) {
-        await row(item, stepTableHeader && index === 0 ? base : combine(base, 'dataTables', config, ...scopes));
+        await row(item, stepTableHeader && index === 0 ? combine(base, 'tableHeaders', config, ...scopes) : combine(base, 'dataTables', config, ...scopes));
       }
       if (step.docString && !ignored(scopes, 'docStrings')) {
         const doc = step.docString;
@@ -360,7 +361,7 @@ export async function checkSpelling(feature: Feature | undefined, source: string
       const exampleScopes = [...scopes, tagPolicy(example.tags, file, reporter, !fixes)];
       const exampleBase = specification(exampleScopes);
       await header(example, exampleBase, combine(exampleBase, 'prose', config, ...exampleScopes), combine(exampleBase, 'quotes', config, ...exampleScopes));
-      if (example.tableHeader) await row(example.tableHeader, exampleBase);
+      if (example.tableHeader) await row(example.tableHeader, combine(exampleBase, 'tableHeaders', config, ...exampleScopes));
       if (!ignored(exampleScopes, 'examples')) for (const item of example.tableBody ?? []) await row(item, combine(exampleBase, 'examples', config, ...exampleScopes));
     }
   }

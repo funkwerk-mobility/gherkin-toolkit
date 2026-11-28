@@ -12,9 +12,14 @@ export function spellingLocale(value: string): string {
 }
 
 export type Policy = { locale?: string; locales?: string[]; off?: boolean };
-export type Region = 'prose' | 'content' | 'quotes' | 'tables' | 'dataTables' | 'examples' | 'docStrings';
+export type Region = 'prose' | 'content' | 'quotes' | 'tables' | 'dataTables' | 'tableHeaders' | 'examples' | 'docStrings';
 export type SnippetMode = 'json' | 'text' | 'ignore';
 export type SpellConfig = { dialects?: Record<string, string>; specification?: Record<string, string>; docStringTypes?: Record<string, SnippetMode> } & Partial<Record<Region, Policy>>;
+
+export function configuredLocale(value: string, config: SpellConfig): string {
+  const mapped = config.specification?.[value] ?? config.dialects?.[value] ?? value;
+  return spellingLocale(mapped);
+}
 
 export function parseSpelling(value: unknown, source: string): SpellConfig {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error(`${source}: spell must be a mapping`);
@@ -33,7 +38,7 @@ export function parseSpelling(value: unknown, source: string): SpellConfig {
       result[key] = setting as Record<string, string>;
       continue;
     }
-    if (!['prose', 'content', 'quotes', 'tables', 'dataTables', 'examples', 'docStrings'].includes(key)) throw new Error(`${source}: unknown spell setting: ${key}`);
+    if (!['prose', 'content', 'quotes', 'tables', 'dataTables', 'tableHeaders', 'examples', 'docStrings'].includes(key)) throw new Error(`${source}: unknown spell setting: ${key}`);
     if (!setting || typeof setting !== 'object' || Array.isArray(setting)) throw new Error(`${source}: spell.${key} must be a mapping`);
     const policy = setting as Record<string, unknown>;
     if (Object.keys(policy).some(k => k !== 'locale' && k !== 'locales')) throw new Error(`${source}: unknown spell.${key} setting`);
@@ -59,7 +64,7 @@ export function mergePolicy(base: Policy = {}, override: Policy = {}): Policy {
 export function mergeSpelling(base: SpellConfig = {}, override: SpellConfig = {}): SpellConfig {
   const result: SpellConfig = { dialects: { ...base.dialects, ...override.dialects }, specification: { ...base.specification, ...override.specification } };
   if (base.docStringTypes || override.docStringTypes) result.docStringTypes = { ...base.docStringTypes, ...override.docStringTypes };
-  for (const region of ['prose', 'content', 'quotes', 'tables', 'dataTables', 'examples', 'docStrings'] as const) {
+  for (const region of ['prose', 'content', 'quotes', 'tables', 'dataTables', 'tableHeaders', 'examples', 'docStrings'] as const) {
     if (base[region] || override[region]) {
       result[region] = mergePolicy(base[region], override[region]);
     }

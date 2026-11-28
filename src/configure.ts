@@ -4,7 +4,7 @@ import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import * as p from '@clack/prompts';
 import { isMap, parseDocument, type Node } from 'yaml';
 import { resolveConfiguration } from './config.js';
-import { spellingLocale, type Region } from './policies.js';
+import { configuredLocale, spellingLocale, type Region } from './policies.js';
 
 function selectionFile(): string {
   const xdg = process.env.XDG_CONFIG_HOME;
@@ -32,7 +32,8 @@ const languages = [
 const regions: { value: Region; label: string; name: string }[] = [
   { value: 'prose', label: 'Prose', name: 'Prose' }, { value: 'content', label: 'Content', name: 'Content' },
   { value: 'quotes', label: '> Quoted content', name: 'Quoted content' }, { value: 'tables', label: '> All tables', name: 'All tables' },
-  { value: 'dataTables', label: '> > Step data tables', name: 'Step data tables' }, { value: 'examples', label: '> > Examples tables', name: 'Examples tables' },
+  { value: 'dataTables', label: '> > Step data tables', name: 'Step data tables' },
+  { value: 'tableHeaders', label: '> Table headers', name: 'Table headers' }, { value: 'examples', label: '> > Examples tables', name: 'Examples tables' },
   { value: 'docStrings', label: '> Docstrings', name: 'Docstrings' },
 ];
 
@@ -85,7 +86,7 @@ export async function configure(args: string[]): Promise<void> {
     const selected = answer(await p.multiselect({ message: 'Which spelling language overrides do you want to configure?', options: regions, initialValues: initialRegions, required: false }));
     for (const { value: region, name } of regions) {
       const policy = current.spell?.[region];
-      const existing = (policy?.locales ?? (policy?.locale ? [policy.locale] : [])).map(spellingLocale);
+      const existing = (policy?.locales ?? (policy?.locale ? [policy.locale] : [])).map(value => configuredLocale(value, current.spell ?? {}));
       if (selected.includes(region)) {
         const chosen = answer(await p.multiselect({ message: `${name}: languages`, options: languages, initialValues: existing.length ? existing : [locale], required: true }));
         if (chosen.join(',') !== existing.join(',')) {
