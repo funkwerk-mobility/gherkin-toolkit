@@ -149,4 +149,9 @@ Run `cuke check --only format features/` to check formatting, or add `--fix` to 
 checks: [spell, format]
 format:
   tags: preserve
+  printWidth: 120
+  indentWidth: 2
+  useTabs: false
 ```
+
+Prose is wrapped to `printWidth`, and tags wrap at that width when kept together. `indentWidth` controls spaces per level, or the display width of a tab when `useTabs` is true. Whitespace in docstrings, quoted text, and table padding is preserved. Fixing repeated spaces in step text can change which step definition matches.

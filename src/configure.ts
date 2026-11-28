@@ -73,11 +73,18 @@ export async function configure(args: string[]): Promise<void> {
   if (stepHeader !== (current.stepTableHeader ?? false)) { document.setIn(['tables', 'stepHeader'], stepHeader); changed = true; }
   if (checks.includes('format')) {
     const tags = answer(await p.select({ message: 'Tag layout', options: [
-      { value: 'preserve', label: 'Keep existing line breaks' },
+      { value: 'preserve', label: 'Keep line breaks' },
       { value: 'one-per-line', label: 'One tag per line' },
       { value: 'single-line', label: 'Combine tags on one line where possible' },
     ], initialValue: current.tagLayout ?? 'preserve' }));
     if (tags !== (current.tagLayout ?? 'preserve')) { document.setIn(['format', 'tags'], tags); changed = true; }
+    const positive = (value: string | undefined) => value && /^[1-9]\d*$/u.test(value) && Number.isSafeInteger(Number(value)) ? undefined : 'Enter a positive integer.';
+    const width = Number(answer(await p.text({ message: 'Line width', initialValue: String(current.printWidth ?? 120), validate: positive })));
+    if (width !== (current.printWidth ?? 120)) { document.setIn(['format', 'printWidth'], width); changed = true; }
+    const indent = Number(answer(await p.text({ message: 'Indentation width', initialValue: String(current.indentWidth ?? 2), validate: positive })));
+    if (indent !== (current.indentWidth ?? 2)) { document.setIn(['format', 'indentWidth'], indent); changed = true; }
+    const useTabs = answer(await p.confirm({ message: 'Use tabs for indentation?', initialValue: current.useTabs ?? false }));
+    if (useTabs !== (current.useTabs ?? false)) { document.setIn(['format', 'useTabs'], useTabs); changed = true; }
   }
   if (checks.includes('spell')) {
     const initialDictionary = current.dictionary ? relative(process.cwd(), current.dictionary) || '.' : 'spellchecker';

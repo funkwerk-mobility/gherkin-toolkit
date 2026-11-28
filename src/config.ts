@@ -6,7 +6,7 @@ import { mergeSpelling, parseSpelling, type SpellConfig } from './policies.js';
 import type { TagLayout } from './format.js';
 
 export type Check = 'spell' | 'format';
-export type Configuration = { checks: Check[]; dictionary?: string; spell?: SpellConfig; diagnosticLimit?: number; stepTableHeader?: boolean; tagLayout?: TagLayout };
+export type Configuration = { checks: Check[]; dictionary?: string; spell?: SpellConfig; diagnosticLimit?: number; stepTableHeader?: boolean; tagLayout?: TagLayout; printWidth?: number; indentWidth?: number; useTabs?: boolean };
 
 function checks(value: unknown, source: string): Check[] {
   if (!Array.isArray(value) || value.some(item => typeof item !== 'string')) {
@@ -49,7 +49,12 @@ export function resolveConfiguration(path: string | undefined, only: string[] | 
       }
       if (config.format !== undefined) {
         const format = config.format;
-        if (!format || typeof format !== 'object' || Array.isArray(format) || Object.keys(format).some(key => key !== 'tags') || (Object.hasOwn(format, 'tags') && !['preserve', 'one-per-line', 'single-line'].includes(String((format as Record<string, unknown>).tags)))) throw new Error(`${file}: format.tags must be preserve, one-per-line or single-line`);
+        if (!format || typeof format !== 'object' || Array.isArray(format)) throw new Error(`${file}: format must be a mapping`);
+        const value = format as Record<string, unknown>;
+        for (const key of Object.keys(value)) if (!['tags', 'printWidth', 'indentWidth', 'useTabs'].includes(key)) throw new Error(`${file}: unknown format setting: ${key}`);
+        if (value.tags !== undefined && !['preserve', 'one-per-line', 'single-line'].includes(String(value.tags))) throw new Error(`${file}: invalid format.tags`);
+        for (const key of ['printWidth', 'indentWidth']) if (value[key] !== undefined && (typeof value[key] !== 'number' || !Number.isSafeInteger(value[key]) || (value[key] as number) < 1)) throw new Error(`${file}: format.${key} must be a positive integer`);
+        if (value.useTabs !== undefined && typeof value.useTabs !== 'boolean') throw new Error(`${file}: format.useTabs must be a boolean`);
       }
       if (config.tables !== undefined) {
         const tables = config.tables;
@@ -67,6 +72,9 @@ export function resolveConfiguration(path: string | undefined, only: string[] | 
         dictionary: config.dictionary === undefined ? inherited.dictionary : resolve(dirname(file), config.dictionary as string),
         spell: mergeSpelling(inherited.spell, config.spell === undefined ? undefined : parseSpelling(config.spell, file)),
         diagnosticLimit: (config.diagnostics as { limit?: number } | undefined)?.limit ?? inherited.diagnosticLimit,
+        printWidth: (config.format as { printWidth?: number } | undefined)?.printWidth ?? inherited.printWidth,
+        indentWidth: (config.format as { indentWidth?: number } | undefined)?.indentWidth ?? inherited.indentWidth,
+        useTabs: (config.format as { useTabs?: boolean } | undefined)?.useTabs ?? inherited.useTabs,
         tagLayout: (config.format as { tags?: TagLayout } | undefined)?.tags ?? inherited.tagLayout,
         stepTableHeader: (config.tables as { stepHeader?: boolean } | undefined)?.stepHeader ?? inherited.stepTableHeader,
       };

@@ -7,11 +7,14 @@ import type { Feature } from '@cucumber/messages';
 import { resolveConfiguration, type Check } from './config.js';
 import type { SpellConfig } from './policies.js';
 import { Reporter, type OutputFormat } from './diagnostics.js';
-import { formatFeature, type TagLayout } from './format.js';
+import { formatFeature, UnsafeFormattingError, type TagLayout } from './format.js';
 import { configure, rememberedConfiguration } from './configure.js';
 
 function report(reporter: Reporter, path: string, error: unknown): void {
-  if (error instanceof Errors.GherkinException) {
+  if (error instanceof UnsafeFormattingError) {
+    const source = readFileSync(path, 'utf8');
+    reporter.report({ path, ...formattingDifference(source, error.formatted), message: error.message, rule: 'format-safety', severity: 'error' });
+  } else if (error instanceof Errors.GherkinException) {
     if (error.errors) {
       for (const child of error.errors) report(reporter, path, child);
     } else {
@@ -24,7 +27,21 @@ function report(reporter: Reporter, path: string, error: unknown): void {
   }
 }
 
-async function check(inputs: string[], checks: Check[], dictionary: string | undefined, verbose: boolean, fix: boolean, reporter: Reporter, policies?: SpellConfig, stepTableHeader = false, tagLayout: TagLayout = 'preserve'): Promise<void> {
+function formattingDifference(source: string, formatted: string): { line: number; column: number; message: string } {
+  const actual = source.split('\n');
+  const expected = formatted.split('\n');
+  let index = 0;
+  while (index < actual.length && index < expected.length && actual[index] === expected[index]) index++;
+  const found = actual[index] ?? '';
+  const wanted = expected[index] ?? '';
+  if (wanted === '' && found !== '') return { line: index + 1, column: 1, message: 'Expected a blank line before this line' };
+  if (found === '' && wanted !== '') return { line: index + 1, column: 1, message: 'Unexpected blank line' };
+  let column = 0;
+  while (column < found.length && column < wanted.length && found[column] === wanted[column]) column++;
+  return { line: index + 1, column: column + 1, message: 'Formatting differs here' };
+}
+
+async function check(inputs: string[], checks: Check[], dictionary: string | undefined, verbose: boolean, fix: boolean, reporter: Reporter, policies?: SpellConfig, stepTableHeader = false, tagLayout: TagLayout = 'preserve', printWidth = 120, indentWidth = 2, useTabs = false): Promise<void> {
   let spelling: typeof import('./spell.js') | undefined;
   let fixes: import('./spell.js').SpellingFixes | undefined;
   const checked: { feature?: Feature; source: string; path: string }[] = [];
@@ -46,10 +63,10 @@ async function check(inputs: string[], checks: Check[], dictionary: string | und
         let document = parser.parse(source);
         if (checks.includes('format')) {
           if (verbose) reporter.progress(`Checking formatting: ${path}`);
-          const formatted = formatFeature(source, document, tagLayout);
+          const formatted = formatFeature(source, document, tagLayout, { printWidth, indentWidth, useTabs });
           if (formatted !== source) {
             if (fix) { writeFileSync(path, formatted); reporter.fixed(`Formatted: ${path}`); source = formatted; document = parser.parse(source); }
-            else reporter.report({ path, line: 1, column: 1, rule: 'format', severity: 'error', message: 'Formatting differs' });
+            else reporter.report({ path, ...formattingDifference(source, formatted), rule: 'format', severity: 'error' });
           }
         }
         if (checks.includes('spell')) {
@@ -122,7 +139,7 @@ if (process.argv[2] === 'configure') {
     }
     const selected = resolveConfiguration(config ?? rememberedConfiguration(), only);
     const reporter = new Reporter(format, limit ?? selected.diagnosticLimit ?? 100);
-    await check(inputs, selected.checks, dictionary ?? selected.dictionary, verbose, fix, reporter, selected.spell, selected.stepTableHeader, selected.tagLayout);
+    await check(inputs, selected.checks, dictionary ?? selected.dictionary, verbose, fix, reporter, selected.spell, selected.stepTableHeader, selected.tagLayout, selected.printWidth, selected.indentWidth, selected.useTabs);
     reporter.finish();
   } catch (error) {
     const reporter = new Reporter(errorFormat, 100);
