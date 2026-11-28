@@ -50,6 +50,8 @@ test('offers all overrides together and checks selected table values in two lang
   ], '--config', 'cuke.yml');
   assert.strictEqual(result.status, 0, result.output);
   assert.notMatch(result.output, /Specification language for German|fix dictionary name/);
+  // Terminal output contains ANSI escape sequences.
+  // oxlint-disable-next-line eslint/no-control-regex
   const plain = result.output.replace(/\x1b\[[0-9;?]*[A-Za-z]/g, '');
   assert.match(plain, /Step data tables: languages\s*\n[^\n]*English \(United States\), German/);
   assert.match(plain, /> All tables/);

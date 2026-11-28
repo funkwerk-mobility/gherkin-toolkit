@@ -10,7 +10,7 @@ node dist/cli.js check features/ path/to/example.feature
 
 Directories are searched recursively for `.feature` files. Pass individual paths to check a selection; shell glob expansion is supported. Valid files produce no output. Syntax errors are printed with file, line and column and cause a nonzero exit status. Running `check` without paths succeeds silently. Add `--verbose` to show each check as it starts for each file, including parsing before the selected checks.
 
-For development, run `npm run typecheck` and `npm test` (Vitest).
+For development, run `npm run lint`, `npm run typecheck` and `npm test` (Vitest).
 
 ## Diagnostics
 

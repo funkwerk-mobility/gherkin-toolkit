@@ -3,7 +3,7 @@ import { readFileSync, writeFileSync, statSync, existsSync, readdirSync } from '
 import { dialects } from '@cucumber/gherkin';
 import { dirname, join } from 'node:path';
 import { getDictionary, validateText } from 'cspell-lib';
-import type { Background, Examples, Feature, Rule, Scenario, Step, TableRow, Tag } from '@cucumber/messages';
+import type { Background, Examples, Feature, Rule, Scenario, TableRow, Tag } from '@cucumber/messages';
 import { configuredLocale, locales, mergePolicy, spellingLocale, type Policy, type Region, type SpellConfig } from './policies.js';
 import type { Reporter } from './diagnostics.js';
 
